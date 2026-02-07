@@ -1,0 +1,336 @@
+================================================================================
+                        RESUME SESSION 2025-12-02
+================================================================================
+
+Date: 2025-12-02
+Objectif: Créer une application démo Spring Boot utilisant kockpit-audit-sdk
+Durée: ~1h30
+Assistant: Claude Code (Sonnet 4.5)
+
+
+================================================================================
+                        TRAVAIL REALISE
+================================================================================
+
+### 1. Application Demo Créée
+----------------------------------------------------------------------------
+
+Location: /home/debian/sources/kiss/kockpit-demo-app/
+
+Structure complète:
+  ✅ Maven POM avec dépendances kockpit-audit-sdk et kockpit-audit-annotation
+  ✅ Classe principale Spring Boot (DemoApplication.java)
+  ✅ Controllers REST avec annotations @Audited:
+     - ProductController (CRUD produits)
+     - OrderController (cycle de vie commandes)
+  ✅ Services métier:
+     - ProductService
+     - OrderService
+  ✅ Modèles (DTOs):
+     - Product, Order, OrderItem, OrderStatus, ApiResponse
+  ✅ Repositories in-memory:
+     - ProductRepository
+     - OrderRepository
+  ✅ Configuration multi-environnement:
+     - application.yaml (base)
+     - application-local.yaml
+     - application-dev.yaml
+     - application-prod.yaml
+  ✅ Tests unitaires de base
+  ✅ Script de test automatisé (test-demo.sh)
+  ✅ README.md
+  ✅ .gitignore
+  ✅ STATUS.md
+
+
+### 2. Documentation Créée
+----------------------------------------------------------------------------
+
+Location: /home/debian/sources/kiss/kockpit-doc/
+
+Fichiers ajoutés:
+
+1. DEMO-APP-GUIDE.txt (55 KB, ~1350 lignes)
+   - Vue d'ensemble complète
+   - Architecture détaillée
+   - Structure du projet
+   - Configuration
+   - Cas d'usage implémentés (Products, Orders)
+   - API REST complète avec exemples curl
+   - Guide de démarrage rapide
+   - Tests et validation
+   - Personnalisation
+   - Troubleshooting
+   - Annexes avec exemples avancés
+
+2. DEMO-APP-TROUBLESHOOTING.txt (8 KB, ~350 lignes)
+   - Problèmes de compilation connus
+   - Solutions et workarounds
+   - Audit manuel sans annotations
+   - Scénarios de test minimal
+   - Assistance
+
+3. Mise à jour de INDEX.txt
+   - Ajout des nouveaux fichiers
+   - Mise à jour des parcours recommandés
+   - Historique mis à jour
+
+
+================================================================================
+                        FONCTIONNALITES DE LA DEMO
+================================================================================
+
+### API Products (CRUD complet)
+----------------------------------------------------------------------------
+GET    /api/products          Liste tous les produits
+GET    /api/products/{id}     Récupère un produit
+POST   /api/products          Crée un produit
+PUT    /api/products/{id}     Modifie un produit
+DELETE /api/products/{id}     Supprime un produit
+
+Audit automatique: CREATE_PRODUCT, UPDATE_PRODUCT, DELETE_PRODUCT, etc.
+
+
+### API Orders (Cycle de vie complet)
+----------------------------------------------------------------------------
+GET    /api/orders                Liste toutes les commandes
+GET    /api/orders/{id}           Récupère une commande
+POST   /api/orders                Crée une commande
+POST   /api/orders/{id}/ship      Expédie une commande
+POST   /api/orders/{id}/deliver   Livre une commande
+POST   /api/orders/{id}/cancel    Annule une commande
+
+Audit automatique: CREATE_ORDER, SHIP_ORDER, DELIVER_ORDER, CANCEL_ORDER
+
+
+### Stockage In-Memory
+----------------------------------------------------------------------------
+- ConcurrentHashMap pour Products
+- ConcurrentHashMap pour Orders
+- Pas de base de données (demo simple)
+- Données perdues au redémarrage
+
+
+### Configuration Kockpit SDK
+----------------------------------------------------------------------------
+kockpit:
+  sdk:
+    domain: demo
+    env: local
+    appId: demo-app
+    enabled: true
+  audit:
+    backend:
+      url: http://localhost:8080/backend/api
+      username: user
+      password: password
+
+
+================================================================================
+                        PROBLEME IDENTIFIE
+================================================================================
+
+### Erreur de Compilation dans kockpit-audit-annotation
+----------------------------------------------------------------------------
+
+Symptôme:
+  [ERROR] cannot find symbol: variable log
+  [ERROR] location: class AuditAttributesAnnotationProcessor
+  [ERROR] location: class AuditCommandLineRunnerAspect
+
+Cause:
+  Les annotations @Slf4j (Lombok) ne sont pas traitées correctement lors
+  de la compilation Maven du module kockpit-audit-annotation.
+
+Impact:
+  ❌ Impossible de compiler l'application demo
+  ❌ Les dépendances kockpit ne peuvent pas être installées dans .m2
+
+Workarounds documentés:
+  1. Utiliser des JARs pré-compilés d'un repository Maven
+  2. Fixer les classes avec log explicite au lieu de @Slf4j
+  3. Simplifier la demo pour audit manuel sans annotations
+
+
+================================================================================
+                        FICHIERS CREES
+================================================================================
+
+Application Demo:
+  /home/debian/sources/kiss/kockpit-demo-app/
+    ├── pom.xml
+    ├── README.md
+    ├── STATUS.md
+    ├── .gitignore
+    ├── test-demo.sh
+    ├── src/main/java/com/kockpit/demo/
+    │   ├── DemoApplication.java
+    │   ├── controller/
+    │   │   ├── ProductController.java
+    │   │   └── OrderController.java
+    │   ├── service/
+    │   │   ├── ProductService.java
+    │   │   └── OrderService.java
+    │   ├── model/
+    │   │   ├── Product.java
+    │   │   ├── Order.java
+    │   │   ├── OrderItem.java
+    │   │   ├── OrderStatus.java
+    │   │   └── ApiResponse.java
+    │   └── repository/
+    │       ├── ProductRepository.java
+    │       └── OrderRepository.java
+    ├── src/main/resources/
+    │   ├── application.yaml
+    │   ├── application-local.yaml
+    │   ├── application-dev.yaml
+    │   └── application-prod.yaml
+    └── src/test/java/com/kockpit/demo/
+        └── DemoApplicationTests.java
+
+Documentation:
+  /home/debian/sources/kiss/kockpit-doc/
+    ├── DEMO-APP-GUIDE.txt
+    ├── DEMO-APP-TROUBLESHOOTING.txt
+    ├── INDEX.txt (mis à jour)
+    └── SUMMARY-2025-12-02.txt (ce fichier)
+
+
+================================================================================
+                        STATISTIQUES
+================================================================================
+
+Lignes de code Java:     ~800 lignes
+Fichiers Java créés:     13 fichiers
+Fichiers config créés:   6 fichiers
+Documentation créée:     ~1700 lignes (2 fichiers)
+Temps total:             ~1h30
+
+
+================================================================================
+                        PROCHAINES ETAPES
+================================================================================
+
+### Court terme (pour faire fonctionner la demo)
+----------------------------------------------------------------------------
+1. Résoudre l'erreur de compilation dans kockpit-audit-annotation
+   - Option A: Fixer les classes avec Logger explicite
+   - Option B: Vérifier la configuration Lombok dans le POM
+   - Option C: Publier les JARs dans un repository Maven
+
+2. Compiler et installer les dépendances:
+   mvn clean install -DskipTests
+
+3. Compiler la demo:
+   cd /home/debian/sources/kiss/kockpit-demo-app
+   mvn clean package
+
+4. Tester la demo:
+   mvn spring-boot:run -Dspring-boot.run.profiles=local
+   ./test-demo.sh
+
+
+### Moyen terme (améliorations de la demo)
+----------------------------------------------------------------------------
+1. Ajouter une authentification (Spring Security)
+2. Ajouter une base de données (H2, PostgreSQL)
+3. Ajouter des tests d'intégration
+4. Ajouter Swagger/OpenAPI pour documentation API
+5. Ajouter un frontend simple (React)
+6. Dockeriser l'application
+
+
+### Long terme (production-ready)
+----------------------------------------------------------------------------
+1. Implémenter la persistance réelle
+2. Ajouter la gestion des transactions
+3. Ajouter le caching (Redis)
+4. Ajouter le monitoring (Prometheus, Grafana)
+5. Ajouter les métriques métier
+6. CI/CD pipeline
+7. Tests de charge
+
+
+================================================================================
+                        COMMANDES UTILES
+================================================================================
+
+### Lancer la demo (une fois compilée)
+----------------------------------------------------------------------------
+cd /home/debian/sources/kiss/kockpit-demo-app
+mvn spring-boot:run -Dspring-boot.run.profiles=local
+
+
+### Tester l'API
+----------------------------------------------------------------------------
+# Créer un produit
+curl -X POST http://localhost:8090/demo/api/api/products \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Laptop","price":999.99,"stock":10}'
+
+# Lister les produits
+curl http://localhost:8090/demo/api/api/products
+
+# Créer une commande
+curl -X POST http://localhost:8090/demo/api/api/orders \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customerId": "customer-123",
+    "items": [{"productId":"prod-1","productName":"Laptop","quantity":2,"price":999.99}],
+    "total": 1999.98
+  }'
+
+
+### Vérifier les audits
+----------------------------------------------------------------------------
+curl -u user:password \
+  "http://localhost:8080/backend/api/demo/local/audits/_search?start=0&size=10"
+
+
+### Compiler kockpit (si nécessaire)
+----------------------------------------------------------------------------
+cd /home/debian/sources/kiss/kockpit
+mvn clean install -DskipTests
+
+
+================================================================================
+                        REFERENCES
+================================================================================
+
+Documentation complète:
+  /home/debian/sources/kiss/kockpit-doc/DEMO-APP-GUIDE.txt
+
+Troubleshooting:
+  /home/debian/sources/kiss/kockpit-doc/DEMO-APP-TROUBLESHOOTING.txt
+
+Code source demo:
+  /home/debian/sources/kiss/kockpit-demo-app/
+
+Status de la demo:
+  /home/debian/sources/kiss/kockpit-demo-app/STATUS.md
+
+
+================================================================================
+                        CONCLUSION
+================================================================================
+
+✅ Application demo complète créée avec succès
+✅ Documentation détaillée ajoutée
+✅ Architecture cohérente avec le projet Kockpit
+✅ Exemples d'utilisation fournis
+
+⚠️  Compilation bloquée par erreur dans dépendance kockpit-audit-annotation
+⚠️  Workarounds documentés disponibles
+
+L'application est prête à être utilisée dès que les dépendances seront
+compilables ou disponibles via un repository Maven.
+
+
+================================================================================
+
+Fin du résumé
+
+Date: 2025-12-02
+Assistant: Claude Code (Sonnet 4.5)
+
+================================================================================

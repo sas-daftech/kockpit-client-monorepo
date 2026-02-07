@@ -1,0 +1,477 @@
+================================================================================
+                 KOCKPIT BACKENDS - ARCHITECTURE VISUELLE
+================================================================================
+
+
+================================================================================
+                        VUE D'ENSEMBLE DU SYSTEME
+================================================================================
+
+                            +------------------+
+                            |   Client HTTP    |
+                            | (Browser/Postman)|
+                            +------------------+
+                                     |
+                                     | HTTP/HTTPS
+                                     v
+                         +-----------------------+
+                         | Spring Security       |
+                         | (Basic Auth)          |
+                         +-----------------------+
+                                     |
+                 +-------------------+-------------------+
+                 |                   |                   |
+                 v                   v                   v
+        +--------------+    +--------------+    +------------------+
+        |  SearchApi   |    |  ConfigApi   |    | FeatureFlippingApi|
+        +--------------+    +--------------+    +------------------+
+        | GET /audits  |    | GET /config  |    | PUT /feature-*   |
+        | POST /search |    | POST /config |    | GET /history     |
+        +--------------+    +--------------+    +------------------+
+                 |                   |                   |
+                 v                   v                   v
+        +--------------+    +--------------+    +------------------+
+        |SearchService |    |ConfigService |    | FeatureService   |
+        +--------------+    +--------------+    +------------------+
+                 |                   |                   |
+         +-------+-------+   +-------+-------+   +------+------+
+         |               |   |               |   |             |
+         v               v   v               v   v             v
+    +----------+  +------+  +----------+  +-----+  +-------+ +-----+
+    |OpenSearch|  |ES    |  |Filesystem|  |Azure|  |FileS. | |Azure|
+    +----------+  +------+  +----------+  +-----+  +-------+ +-----+
+
+
+================================================================================
+                        ARCHITECTURE HEXAGONALE
+================================================================================
+
+    +-------------------------------------------------------------------+
+    |                        DOMAIN LAYER                               |
+    |                                                                   |
+    |   +-------------------+     +-------------------+                 |
+    |   | SearchService     |     | ConfigService     |                 |
+    |   | (Interface)       |     | (Interface)       |                 |
+    |   +-------------------+     +-------------------+                 |
+    |                                                                   |
+    |   Business Logic / Domain Models / Use Cases                     |
+    +-------------------------------------------------------------------+
+              ^                             ^
+              |                             |
+    +---------+---------+         +---------+---------+
+    | INPUT ADAPTERS    |         | OUTPUT ADAPTERS   |
+    | (Controllers/API) |         | (Repositories)    |
+    +---------+---------+         +---------+---------+
+              |                             |
+              v                             v
+    +-------------------+         +-------------------+
+    |   SearchApi       |         | OpensearchRepo    |
+    |   ConfigApi       |         | FilesystemRepo    |
+    |   FeatureFlipApi  |         | AzureRepo         |
+    +-------------------+         +-------------------+
+
+
+================================================================================
+                        FLUX DE REQUETE AUDIT
+================================================================================
+
+1. Client                    curl -u user:password /rcu/local/audits/_search
+                                         |
+                                         v
+2. Spring Security           Valide credentials (Basic Auth)
+                                         |
+                                         v
+3. SearchApi                 Extrait: domain=rcu, env=local, start=0, size=50
+                                         |
+                                         v
+4. SearchService             Construit criteres de recherche
+                                         |
+                                         v
+5. OpensearchRepository      Genere requete DSL OpenSearch
+                                         |
+                                         v
+6. OpenSearch                Execute recherche sur index "kockpit-audit"
+                                         |
+                                         v
+7. OpensearchRepository      Transforme hits en objets Java
+                                         |
+                                         v
+8. SearchService             Construit objet Page (items + total)
+                                         |
+                                         v
+9. SearchApi                 Serialise en JSON
+                                         |
+                                         v
+10. Client                   Recoit: {"size":50, "items":[...], "total":156}
+
+
+================================================================================
+                        MODULE DEPENDENCIES
+================================================================================
+
+                    kockpit-backend-application
+                                |
+                +---------------+---------------+
+                |               |               |
+                v               v               v
+        authentication-     service-       service-
+            basic          search         storage
+                                |               |
+                        +-------+-------+   +---+---+
+                        |               |   |       |
+                        v               v   v       v
+                   search-api      search-  storage- storage-
+                                   opensearch  filesystem  azure
+
+
+Legende:
+    |  : Dependance Maven
+    -> : Appel de methode
+    [] : Module
+    {} : Interface
+
+
+================================================================================
+                        MULTI-TENANCY STRUCTURE
+================================================================================
+
+                        URL Path Structure
+                        ------------------
+
+                /{domain}/{env}/{resource}
+                    |       |        |
+                    |       |        +--- Resource (audits, config, etc.)
+                    |       |
+                    |       +------------ Environment (local, dev, prod)
+                    |
+                    +-------------------- Domain (rcu, payment, billing)
+
+
+Exemples:
+    /rcu/local/audits        -> Domain: rcu,     Env: local
+    /payment/prod/audits     -> Domain: payment, Env: prod
+    /billing/staging/audits  -> Domain: billing, Env: staging
+
+
+Isolation des donnees:
+    - Index OpenSearch: {domain}-{env}-audits
+    - Filesystem: /storage/{domain}/{env}/
+    - Azure Container: {domain}-{env}
+
+
+================================================================================
+                        PROFILES MAVEN
+================================================================================
+
+                        Backend Application
+                               |
+                    +----------+----------+
+                    |                     |
+            [Profile: opensearch]   [Profile: filesystem]
+                    |                     |
+                    v                     v
+        +-----------------------+   +-----------------------+
+        | service-search-       |   | service-storage-      |
+        | opensearch            |   | filesystem            |
+        +-----------------------+   +-----------------------+
+                    |                     |
+                    v                     v
+            OpenSearch Cluster      Local Filesystem
+             (http://localhost:9200)  (/tmp/kockpit-storage)
+
+
+Activation:
+    mvn package -P opensearch,filesystem
+
+
+Profils disponibles:
+    - opensearch   : Moteur de recherche OpenSearch
+    - filesystem   : Stockage sur disque local
+    - azure        : Stockage Azure Blob
+
+
+================================================================================
+                        CONFIGURATION FILES
+================================================================================
+
+application.yaml (base)
+    |
+    +-- application-local.yaml (dev local)
+    |     |
+    |     +-- opensearch: http://localhost:9200
+    |     +-- storage: /tmp/kockpit-storage
+    |
+    +-- application-dev.yaml (dev)
+    |     |
+    |     +-- opensearch: http://opensearch-dev:9200
+    |     +-- storage: filesystem
+    |
+    +-- application-staging.yaml (staging)
+    |     |
+    |     +-- opensearch: https://opensearch-stg.azure.com
+    |     +-- storage: azure blob
+    |
+    +-- application-prod.yaml (production)
+          |
+          +-- opensearch: https://opensearch-prod.azure.com
+          +-- storage: azure blob (HA)
+
+
+Priorite de chargement:
+    1. application.yaml
+    2. application-{profile}.yaml
+    3. Variables d'environnement
+    4. Arguments ligne de commande
+
+
+================================================================================
+                        STORAGE STRATEGIES
+================================================================================
+
+                    ConfigApiService (Interface)
+                            |
+                +-----------+-----------+
+                |                       |
+                v                       v
+        FileSystemRepository      AzureRepository
+                |                       |
+                v                       v
+        /tmp/kockpit-storage     Azure Blob Storage
+                |                       |
+                v                       v
+        UUID.json files          Blobs in container
+
+
+FileSystem Structure:
+    /tmp/kockpit-storage/
+        ├── a1b2c3d4-e5f6-7890-abcd-ef1234567890
+        ├── b2c3d4e5-f6a7-8901-bcde-fa2345678901
+        └── c3d4e5f6-a7b8-9012-cdef-ab3456789012
+
+    Chaque fichier = 1 ConfigItem en JSON
+
+Azure Blob Structure:
+    Container: kockpit-configs
+        ├── rcu/local/config-1.json
+        ├── rcu/prod/config-1.json
+        └── payment/prod/config-1.json
+
+
+================================================================================
+                        FEATURE FLIPPING WORKFLOW
+================================================================================
+
+Phase 1: Canary (10%)
+    PUT /rcu/prod/feature-flipping?key=new-ui
+    {"enabled": true, "percentage": 10}
+              |
+              v
+    [ 10% des utilisateurs voient la nouvelle UI ]
+              |
+              v
+    [ Monitoring metrics & logs ]
+              |
+              +-- Probleme? --> ROLLBACK (percentage: 0)
+              |
+              +-- OK? --> Phase 2
+
+Phase 2: Progressive (50%)
+    PUT /rcu/prod/feature-flipping?key=new-ui
+    {"enabled": true, "percentage": 50}
+              |
+              v
+    [ 50% des utilisateurs ]
+              |
+              v
+    [ Monitoring ]
+              |
+              +-- OK? --> Phase 3
+
+Phase 3: Full Deploy (100%)
+    PUT /rcu/prod/feature-flipping?key=new-ui
+    {"enabled": true, "percentage": 100}
+              |
+              v
+    [ Tous les utilisateurs ]
+
+
+Historique sauvegarde:
+    - Timestamp
+    - Utilisateur (author)
+    - Action (ENABLED, DISABLED, UPDATED)
+    - Pourcentage
+    - Raison (metadata)
+
+
+================================================================================
+                        OPENSEARCH INDEX STRUCTURE
+================================================================================
+
+Index: kockpit-audit
+    |
+    +-- Mappings
+    |     |
+    |     +-- id           : keyword
+    |     +-- timestamp    : date
+    |     +-- domain       : keyword
+    |     +-- env          : keyword
+    |     +-- user         : keyword
+    |     +-- action       : keyword
+    |     +-- ip_address   : ip
+    |     +-- user_agent   : text
+    |     +-- details      : object
+    |
+    +-- Settings
+          |
+          +-- number_of_shards: 1
+          +-- number_of_replicas: 1
+
+
+Requete DSL exemple:
+    {
+      "query": {
+        "bool": {
+          "must": [
+            {"term": {"domain": "rcu"}},
+            {"term": {"env": "local"}},
+            {"term": {"user": "john.doe"}}
+          ]
+        }
+      },
+      "sort": [{"timestamp": {"order": "desc"}}],
+      "from": 0,
+      "size": 50
+    }
+
+
+================================================================================
+                        DEPLOYMENT ARCHITECTURE
+================================================================================
+
+Development (Local):
+    Developer Laptop
+        |
+        +-- Java App (port 8080)
+        +-- OpenSearch Docker (port 9200)
+        +-- Filesystem (/tmp/kockpit-storage)
+
+
+Staging (Azure):
+    Azure App Service
+        |
+        +-- Java App (HA: 2 instances)
+        |
+    Azure OpenSearch Service
+        |
+        +-- Cluster (3 nodes)
+        |
+    Azure Blob Storage
+        |
+        +-- Geo-redundant
+
+
+Production (Azure):
+    Azure App Service
+        |
+        +-- Java App (HA: 3+ instances)
+        +-- Auto-scaling
+        +-- Load Balancer
+        |
+    Azure OpenSearch Service
+        |
+        +-- Cluster (5+ nodes)
+        +-- Multi-zone
+        |
+    Azure Blob Storage
+        |
+        +-- Geo-redundant
+        +-- Backup & DR
+
+
+================================================================================
+                        SECURITY LAYERS
+================================================================================
+
+    Client
+        |
+        | HTTPS/TLS
+        v
+    Load Balancer / Reverse Proxy
+        |
+        | Internal Network
+        v
+    Spring Security
+        |
+        +-- Authentication (Basic Auth / JWT)
+        +-- Authorization (Roles)
+        +-- CORS
+        +-- CSRF (disabled for API)
+        |
+        v
+    Application Logic
+        |
+        +-- Input Validation
+        +-- Business Rules
+        |
+        v
+    Data Layer
+        |
+        +-- Connection Encryption
+        +-- Credentials in Vault
+
+
+Recommandations Production:
+    [x] HTTPS obligatoire
+    [x] JWT au lieu de Basic Auth
+    [x] Rate Limiting
+    [x] WAF (Web Application Firewall)
+    [x] Secrets dans Azure Key Vault
+    [x] Audit Logs
+    [x] Monitoring & Alerting
+
+
+================================================================================
+                        MONITORING STACK
+================================================================================
+
+Application
+    |
+    +-- Spring Boot Actuator
+    |     |
+    |     +-- /actuator/health
+    |     +-- /actuator/metrics
+    |     +-- /actuator/prometheus
+    |
+    +-- Micrometer
+    |     |
+    |     +-- Metrics Collection
+    |     +-- Export to Prometheus
+    |
+    +-- SLF4J / Logback
+          |
+          +-- Application Logs
+          +-- Structured Logging (JSON)
+
+
+Monitoring Tools (recommande):
+    - Prometheus     : Metrics collection
+    - Grafana        : Visualization
+    - ELK Stack      : Log aggregation
+    - Azure Monitor  : Cloud monitoring
+    - AlertManager   : Alerting
+
+
+Key Metrics:
+    - JVM Memory Usage
+    - HTTP Request Count
+    - Response Time (p50, p95, p99)
+    - Error Rate
+    - OpenSearch Query Time
+    - Disk Space
+
+
+================================================================================
+
+Fin du document
+
+================================================================================

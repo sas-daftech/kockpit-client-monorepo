@@ -1,0 +1,329 @@
+================================================================================
+                KOCKPIT DEMO APPLICATION - TROUBLESHOOTING
+================================================================================
+
+Date: 2025-12-02
+Version: 1.0.0
+
+
+================================================================================
+                        PROBLEMES CONNUS ET SOLUTIONS
+================================================================================
+
+### Probleme 1: Erreur de compilation kockpit-audit-annotation
+----------------------------------------------------------------------------
+
+Symptome:
+  Lors de la compilation du projet kockpit principal, erreur:
+
+  [ERROR] cannot find symbol: variable log
+  [ERROR] location: class AuditAttributesAnnotationProcessor
+  [ERROR] location: class AuditCommandLineRunnerAspect
+
+Cause:
+  Le plugin Maven Lombok n'est pas correctement traite pendant la compilation
+  de certains modules. Les annotations @Slf4j ne sont pas processees.
+
+Solutions possibles:
+
+Solution A: Utiliser une version pre-compilee des dependances
+--------------------------------------------------------------
+Si les JARs kockpit sont disponibles dans un repository Maven (Nexus, Azure
+Artifacts), les utiliser directement:
+
+1. Configurer le repository dans ~/.m2/settings.xml
+2. Les dependances seront telechargees automatiquement
+3. La demo app pourra etre compilee sans probleme
+
+
+Solution B: Compiler manuellement les modules requis
+--------------------------------------------------------------
+1. Fixer les erreurs de compilation dans kockpit-audit-annotation:
+
+   Option 1 - Ajouter le scope provided a lombok:
+
+   <dependency>
+       <groupId>org.projectlombok</groupId>
+       <artifactId>lombok</artifactId>
+       <scope>provided</scope>
+   </dependency>
+
+   Option 2 - Remplacer @Slf4j par Logger explicite:
+
+   // Remplacer
+   @Slf4j
+   public class MyClass {
+
+   // Par
+   public class MyClass {
+       private static final Logger log = LoggerFactory.getLogger(MyClass.class);
+
+2. Recompiler:
+   cd /home/debian/sources/kiss/kockpit
+   mvn clean install -DskipTests
+
+
+Solution C: Simplifier la demo sans annotations
+--------------------------------------------------------------
+Modifier la demo app pour utiliser uniquement kockpit-audit-sdk sans le
+module annotation:
+
+1. Supprimer la dependance kockpit-audit-annotation du pom.xml
+2. Retirer les annotations @Audited et @AuditAttribute
+3. Auditer manuellement via AuditEventPublisher
+
+Exemple:
+
+@RestController
+@RequestMapping("/api/products")
+public class ProductController {
+
+    private final ProductService productService;
+    private final AuditEventPublisher auditPublisher;  // Injecter
+
+    @PostMapping
+    public ApiResponse<Product> createProduct(@RequestBody Product product) {
+        Product created = productService.createProduct(product);
+
+        // Auditer manuellement
+        AuditEvent event = AuditEvent.builder()
+            .domain("demo")
+            .env("local")
+            .appId("demo-app")
+            .action("CREATE_PRODUCT")
+            .timestamp(Instant.now())
+            .payload(Map.of("product", product))
+            .build();
+
+        auditPublisher.publish(event);
+
+        return ApiResponse.success(created);
+    }
+}
+
+
+### Probleme 2: Application demarre mais audits non envoyes
+----------------------------------------------------------------------------
+
+Symptome:
+  L'application Spring Boot demarre sans erreur mais aucun audit n'apparait
+  dans kockpit-backend.
+
+Causes possibles:
+
+1. kockpit-backend non accessible
+   Solution: Verifier que le backend est demarré sur http://localhost:8080
+   curl -u user:password http://localhost:8080/backend/api/config
+
+2. Configuration incorrecte dans application.yaml
+   Solution: Verifier kockpit.audit.backend.url
+
+3. Credentials invalides
+   Solution: Verifier username/password dans application.yaml
+
+4. Timeout trop court
+   Solution: Augmenter kockpit.audit.backend.timeout dans application.yaml
+
+5. SDK non activé
+   Solution: Verifier kockpit.sdk.enabled=true
+
+
+### Probleme 3: ClassNotFoundException ou NoClassDefFoundError
+----------------------------------------------------------------------------
+
+Symptome:
+  Au demarrage:
+  java.lang.ClassNotFoundException: org.kockpit.audit.sdk.SomeClass
+
+Cause:
+  Dependances kockpit non presentes dans le repository Maven local
+
+Solution:
+  1. Compiler et installer kockpit-audit-sdk:
+     cd /home/debian/sources/kiss/kockpit
+     mvn clean install -DskipTests -pl kockpit-audit/kockpit-audit-sdk -am
+
+  2. Verifier l'installation:
+     ls -la ~/.m2/repository/org/kockpit/kockpit-audit-sdk/1.0.0-SNAPSHOT/
+
+
+### Probleme 4: Port 8090 deja utilise
+----------------------------------------------------------------------------
+
+Symptome:
+  Erreur au demarrage:
+  Web server failed to start. Port 8090 was already in use.
+
+Solution:
+  1. Changer le port dans application.yaml:
+     server.port: 8091
+
+  2. Ou arreter l'application qui utilise le port:
+     lsof -ti:8090 | xargs kill -9
+
+
+### Probleme 5: OpenSearch non accessible
+----------------------------------------------------------------------------
+
+Symptome:
+  Backend fonctionne mais recherche d'audits echoue
+
+Solution:
+  1. Verifier OpenSearch:
+     curl http://localhost:9200
+
+  2. Demarrer OpenSearch:
+     cd /home/debian/sources/others/opensearch
+     docker compose -f docker-compose-dev.yml up -d
+
+  3. Verifier le status:
+     curl http://localhost:9200/_cluster/health?pretty
+
+
+================================================================================
+                        WORKAROUND RECOMMANDE
+================================================================================
+
+En attendant la resolution des problemes de compilation, voici la configuration
+recommandee pour la demo:
+
+
+Etape 1: Utiliser uniquement kockpit-audit-sdk
+----------------------------------------------------------------------------
+
+Modifier pom.xml de la demo app:
+
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <!-- SDK uniquement, pas annotation -->
+    <dependency>
+        <groupId>org.kockpit</groupId>
+        <artifactId>kockpit-audit-sdk</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </dependency>
+
+    <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <optional>true</optional>
+    </dependency>
+</dependencies>
+
+
+Etape 2: Audit manuel dans les controllers
+----------------------------------------------------------------------------
+
+@RestController
+@RequestMapping("/api/products")
+@RequiredArgsConstructor
+public class ProductController {
+
+    private final ProductService productService;
+    private final AuditService auditService;  // Service custom
+
+    @PostMapping
+    public ApiResponse<Product> createProduct(@RequestBody Product product) {
+        Product created = productService.createProduct(product);
+        auditService.audit("CREATE_PRODUCT", Map.of("product", created));
+        return ApiResponse.success(created);
+    }
+}
+
+
+Etape 3: Creer un AuditService helper
+----------------------------------------------------------------------------
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class AuditService {
+
+    private final SdkApplicationProperties sdkProperties;
+    private final RestTemplate restTemplate;
+
+    public void audit(String action, Map<String, Object> payload) {
+        try {
+            AuditEvent event = AuditEvent.builder()
+                .domain(sdkProperties.getDomain())
+                .env(sdkProperties.getEnv())
+                .appId(sdkProperties.getAppId())
+                .action(action)
+                .timestamp(Instant.now())
+                .payload(payload)
+                .build();
+
+            // Envoyer vers kockpit-backend
+            sendToBackend(event);
+        } catch (Exception e) {
+            log.error("Failed to send audit", e);
+        }
+    }
+
+    private void sendToBackend(AuditEvent event) {
+        String url = String.format("%s/%s/%s/audits",
+            backendUrl,
+            event.getDomain(),
+            event.getEnv());
+
+        restTemplate.postForEntity(url, event, Void.class);
+    }
+}
+
+
+================================================================================
+                        SCENARIO DE TEST MINIMAL
+================================================================================
+
+Pour tester rapidement sans compilation complete:
+
+1. Demarrer kockpit-backend (deja compile)
+   cd /home/debian/sources/kiss/kockpit/kockpit-backends/kockpit-backend-application
+   mvn spring-boot:run -Dspring-boot.run.profiles=local,opensearch,filesystem
+
+2. Tester manuellement via curl
+   curl -u user:password -X POST \
+     http://localhost:8080/backend/api/demo/local/audits \
+     -H "Content-Type: application/json" \
+     -d '{
+       "action": "TEST_ACTION",
+       "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'",
+       "domain": "demo",
+       "env": "local",
+       "appId": "demo-app",
+       "payload": {"test": "manual audit"}
+     }'
+
+3. Verifier l'audit
+   curl -u user:password \
+     "http://localhost:8080/backend/api/demo/local/audits/_search"
+
+
+================================================================================
+                        ASSISTANCE
+================================================================================
+
+Si les problemes persistent:
+
+1. Verifier les logs de l'application demo
+   tail -f /home/debian/sources/kiss/kockpit-demo-app/logs/application.log
+
+2. Verifier les logs de kockpit-backend
+   Dans la console IntelliJ ou Maven
+
+3. Verifier les logs OpenSearch
+   docker logs opensearch-node1-dev
+
+4. Activer le debug logging
+   Dans application.yaml:
+   logging.level.org.kockpit: DEBUG
+
+
+================================================================================
+
+Fin du guide de troubleshooting
+
+================================================================================

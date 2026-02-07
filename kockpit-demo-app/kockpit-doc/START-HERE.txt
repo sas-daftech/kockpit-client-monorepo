@@ -1,0 +1,318 @@
+================================================================================
+                         BIENVENUE DANS KOCKPIT !
+================================================================================
+
+         _  __           _          _ _
+        | |/ /___   ___ | | ___ __ (_) |_
+        | ' // _ \ / __|| |/ / '_ \| | __|
+        | . \ (_) | (__ |   <| |_) | | |_
+        |_|\_\___/ \___||_|\_\ .__/|_|\__|
+                             |_|
+
+================================================================================
+
+Vous êtes sur le point de travailler avec Kockpit, une suite d'outils Java
+pour l'audit automatique, les règles métier, et la gestion de configuration.
+
+Ce fichier vous guide vers la bonne documentation selon votre profil.
+
+
+================================================================================
+                         DÉMARRAGE RAPIDE (5 MIN)
+================================================================================
+
+ÉTAPE 1 : Vérifier Java 21
+---------------------------
+$ java -version
+
+Doit afficher: "21.0.x"
+
+Si vous avez une autre version:
+→ Lire BUILD-TROUBLESHOOTING.txt (Section: Vérification Version Java)
+
+
+ÉTAPE 2 : Builder le projet
+----------------------------
+$ cd /home/debian/sources/kiss/kockpit
+$ JAVA_HOME=/path/to/java-21 mvn clean install -DskipTests
+
+Attendu: [INFO] BUILD SUCCESS
+
+En cas d'erreur:
+→ Lire BUILD-TROUBLESHOOTING.txt (IMMÉDIATEMENT !)
+
+
+ÉTAPE 3 : Suivre votre parcours
+--------------------------------
+→ Voir section "CHOISISSEZ VOTRE PARCOURS" ci-dessous
+
+
+================================================================================
+                      CHOISISSEZ VOTRE PARCOURS
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ JE SUIS DÉVELOPPEUR - NOUVEAU SUR LE PROJET                            │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  Parcours recommandé (2-3 heures):
+
+  1. README.txt (10 min)
+     → Vue d'ensemble complète du projet
+
+  2. BUILD-TROUBLESHOOTING.txt (15 min)
+     → SEULEMENT si vous avez des erreurs de build
+
+  3. QUICK-START.txt (15 min)
+     → Démarrer l'application en local
+
+  4. DEMO-APP-GUIDE.txt (30 min)
+     → Créer votre première application avec kockpit-audit-sdk
+
+  5. API-REFERENCE.txt (30 min)
+     → Référence complète des APIs REST
+
+  6. ARCHITECTURE.txt (1 heure)
+     → Comprendre l'architecture en profondeur
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ JE SUIS ARCHITECTE / TECH LEAD                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  Parcours recommandé (1-2 heures):
+
+  1. README.txt (10 min)
+     → Vue d'ensemble du projet
+
+  2. ARCHITECTURE.txt (1 heure)
+     → Architecture hexagonale, patterns, modules
+
+  3. VISUAL-ARCHITECTURE.txt (15 min)
+     → Diagrammes ASCII de l'architecture
+
+  4. API-REFERENCE.txt (20 min)
+     → Survol des capacités des APIs
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ JE SUIS TESTEUR / QA                                                    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  Parcours recommandé (1 heure):
+
+  1. README.txt (10 min)
+     → Vue d'ensemble du projet
+
+  2. QUICK-START.txt (15 min)
+     → Démarrer l'environnement de test
+
+  3. API-REFERENCE.txt (45 min)
+     → Tous les endpoints à tester avec exemples curl
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ JE SUIS OPS / DEVOPS                                                    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  Parcours recommandé (1 heure):
+
+  1. README.txt (10 min)
+     → Vue d'ensemble du projet
+
+  2. QUICK-START.txt (15 min)
+     → Démarrer l'application (OpenSearch + Backend)
+
+  3. ARCHITECTURE.txt - Section 8 (30 min)
+     → Déploiement Docker, Azure, monitoring
+
+  4. ARCHITECTURE.txt - Section 9 (15 min)
+     → Développement local, debugging
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ J'AI DES ERREURS DE COMPILATION !                                      │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  → BUILD-TROUBLESHOOTING.txt (TOUT DE SUITE !)
+
+  Ce document couvre:
+    ✓ Erreurs de version Java
+    ✓ Erreurs Lombok (package lombok does not exist)
+    ✓ Erreurs AbstractAuditEvent (method not found)
+    ✓ Configuration Maven Compiler Plugin
+    ✓ Solutions complètes et testées
+
+
+================================================================================
+                         PROBLÈMES FRÉQUENTS
+================================================================================
+
+ERREUR: "BUILD FAILURE" lors du mvn install
+--------------------------------------------
+Cause probable: Mauvaise version de Java
+
+Solution:
+  1. Vérifier: java -version
+  2. Si pas Java 21:
+     $ JAVA_HOME=/path/to/java-21 mvn clean install -DskipTests
+
+→ Détails: BUILD-TROUBLESHOOTING.txt
+
+
+ERREUR: "package lombok does not exist"
+----------------------------------------
+Cause: Dépendance Lombok manquante dans un module
+
+Solution: Déjà corrigée dans le code source
+
+Si ça persiste:
+  $ mvn clean install -U -DskipTests
+
+→ Détails: BUILD-TROUBLESHOOTING.txt
+
+
+ERREUR: L'application ne démarre pas
+-------------------------------------
+Cause probable: OpenSearch pas démarré
+
+Solution:
+  $ cd /path/to/opensearch
+  $ docker compose up -d
+
+→ Détails: QUICK-START.txt (Section Troubleshooting)
+
+
+ERREUR: 401 Unauthorized sur les APIs
+--------------------------------------
+Cause: Authentification Basic Auth manquante
+
+Solution:
+  $ curl -u user:password http://localhost:8080/backend/api/...
+
+→ Détails: API-REFERENCE.txt (Section 1: Authentification)
+
+
+================================================================================
+                         INDEX DE LA DOCUMENTATION
+================================================================================
+
+Documentation disponible dans kockpit-doc/:
+
+  README.txt                    Vue d'ensemble complète
+  QUICK-START.txt              Démarrage en 5 minutes
+  ARCHITECTURE.txt             Architecture détaillée
+  API-REFERENCE.txt            Référence des APIs REST
+  VISUAL-ARCHITECTURE.txt      Diagrammes ASCII
+
+  DEMO-APP-GUIDE.txt           Guide de l'application démo
+  DEMO-APP-TROUBLESHOOTING.txt Résolution problèmes démo
+
+  BUILD-TROUBLESHOOTING.txt    Résolution problèmes de build  ⚠️ IMPORTANT
+  CHANGELOG-BUILD-FIXES.txt    Historique des corrections
+
+  SESSION-CONTEXT.txt          Contexte historique du projet
+  INDEX.txt                    Index complet de la documentation
+
+→ Pour naviguer: INDEX.txt
+
+
+================================================================================
+                         COMMANDES ESSENTIELLES
+================================================================================
+
+Build complet du projet:
+  $ JAVA_HOME=/path/to/java-21 mvn clean install -DskipTests
+
+Démarrer OpenSearch:
+  $ cd /path/to/opensearch
+  $ docker compose up -d
+
+Démarrer le backend:
+  $ cd kockpit-backends/kockpit-backend-application
+  $ JAVA_HOME=/path/to/java-21 mvn spring-boot:run \
+      -Dspring-boot.run.profiles=local,opensearch,filesystem
+
+Tester l'API:
+  $ curl -u user:password \
+      http://localhost:8080/backend/api/rcu/local/audits/_search
+
+Vérifier la santé:
+  $ curl http://localhost:8080/backend/actuator/health
+
+
+================================================================================
+                         RESSOURCES UTILES
+================================================================================
+
+OpenSearch Dashboard:
+  http://localhost:5601
+
+Backend Actuator:
+  http://localhost:8080/backend/actuator
+
+API Base URL:
+  http://localhost:8080/backend/api
+
+Credentials par défaut:
+  Username: user
+  Password: password
+
+
+================================================================================
+                         STACK TECHNIQUE
+================================================================================
+
+Backend:
+  • Java 21 (OBLIGATOIRE)
+  • Spring Boot 3.4.3
+  • Maven 3.8+
+  • Lombok 1.18.36
+
+Stockage:
+  • OpenSearch 3.3.2
+  • Filesystem (dev)
+  • Azure Storage (prod)
+
+Frontend:
+  • React (Audit Console UI)
+  • Vue.js (Rules Designer)
+
+Infrastructure:
+  • Docker & Docker Compose
+  • Terraform (variables)
+
+
+================================================================================
+                         SUPPORT
+================================================================================
+
+1. Documentation complète dans kockpit-doc/
+2. README.txt pour vue d'ensemble
+3. BUILD-TROUBLESHOOTING.txt pour problèmes de build
+4. QUICK-START.txt pour problèmes de démarrage
+5. Ouvrir une issue sur le repository (si applicable)
+
+
+================================================================================
+                         PROCHAINES ÉTAPES
+================================================================================
+
+Maintenant que vous avez lu ce fichier:
+
+[ ] Choisir votre parcours ci-dessus
+[ ] Builder le projet avec Java 21
+[ ] Lire le premier document de votre parcours
+[ ] Démarrer l'application (QUICK-START.txt)
+[ ] Tester les APIs (API-REFERENCE.txt)
+
+
+================================================================================
+
+                    Bon développement avec Kockpit ! 🚀
+
+================================================================================
+
+Questions? → Consulter INDEX.txt pour trouver la bonne documentation
+
+================================================================================

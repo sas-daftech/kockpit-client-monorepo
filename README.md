@@ -221,8 +221,8 @@ curl -X POST http://localhost:8091/demo/api/api/products \
   -H "Content-Type: application/json" \
   -d '{"name":"Laptop","price":999.99,"stock":10}'
 
-# Search audits in backend
-curl -u user:password \
+# Search audits in backend (requires authentication)
+curl -u "${KOCKPIT_USERNAME}:${KOCKPIT_PASSWORD}" \
   "http://localhost:8080/backend/api/demo/local/audits/_search?start=0&size=10"
 ```
 
@@ -367,10 +367,11 @@ curl -X POST http://localhost:8091/demo/api/api/orders/{orderId}/ship \
 export OPENSEARCH_ENDPOINTS=http://localhost:9200
 export INDEX_NAME=kockpit-audit
 
-# Demo App
+# Demo App (REQUIRED - Set credentials)
 export KOCKPIT_BACKEND_URL=http://localhost:8080/backend/api
 export KOCKPIT_USERNAME=user
-export KOCKPIT_PASSWORD=password
+export KOCKPIT_PASSWORD=your_secure_password_here
+# WARNING: Never commit actual passwords! Change for production!
 ```
 
 ### Application Properties
@@ -435,8 +436,10 @@ Examples:
 #### Authentication
 
 All endpoints require HTTP Basic Auth:
-- Username: `user`
-- Password: `password`
+- Username: Configured via environment variable
+- Password: **MUST be set via `KOCKPIT_PASSWORD` environment variable**
+
+**Security Warning**: The examples below use placeholder credentials. Always use environment variables and never commit real passwords to version control.
 
 #### Audit Endpoints
 

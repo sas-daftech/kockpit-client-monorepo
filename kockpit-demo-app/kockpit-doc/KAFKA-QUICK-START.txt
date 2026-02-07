@@ -1,0 +1,617 @@
+================================================================================
+              KOCKPIT AUDIT TRAIL WITH KAFKA - QUICK START
+================================================================================
+
+Ce guide vous permet de démarrer rapidement avec Kockpit Audit Trail
+utilisant Kafka pour une architecture événementielle scalable.
+
+Date: 2025-12-23
+Version: 1.0.0-SNAPSHOT
+
+================================================================================
+                           ARCHITECTURE
+================================================================================
+
+    Demo App (@Audited)
+         ↓
+    Kafka Producer
+         ↓
+    Kafka Topic: "audit"
+         ↓
+    Kafka Stream Consumer
+         ↓
+    OpensearchIndexer
+         ↓
+    OpenSearch
+         ↓
+    OpenSearch Dashboards (Visualisation)
+
+
+Avantages de cette architecture:
+  ✓ Asynchrone - Pas d'impact sur les performances de l'application
+  ✓ Résiliente - Kafka garantit la livraison des messages
+  ✓ Scalable - Peut gérer des millions d'audits
+  ✓ Découplée - Applications et indexation indépendantes
+
+
+================================================================================
+                           PRÉ-REQUIS
+================================================================================
+
+Logiciels installés:
+  [x] Java 17
+  [x] Maven 3.8+
+  [x] Docker & Docker Compose
+  [x] Node.js 16+ (optionnel, pour l'UI)
+
+Vérification:
+  $ java -version
+  openjdk version "17.0.x"
+
+  $ mvn -version
+  Apache Maven 3.9.x
+
+  $ docker --version
+  Docker version 24.x.x
+
+
+================================================================================
+                 ÉTAPE 1: DÉMARRER KAFKA + OPENSEARCH
+================================================================================
+
+1. Aller dans le répertoire:
+   $ cd /home/gbonaventure/sources/kiss/os-kafka
+
+2. Démarrer l'infrastructure:
+   $ docker compose -f docker-compose-dev.yml up -d
+
+3. Attendre 15-20 secondes que tout démarre...
+
+4. Vérifier OpenSearch:
+   $ curl http://localhost:9200
+
+   Réponse attendue:
+   {
+     "name" : "opensearch-node1",
+     "cluster_name" : "opensearch-cluster-dev",
+     ...
+   }
+
+5. Vérifier Kafka (optionnel):
+   $ docker compose -f docker-compose-dev.yml logs kafka | tail -20
+
+   Vous devez voir: "Kafka Server started"
+
+
+Services démarrés:
+  - Kafka: localhost:9092
+  - OpenSearch: localhost:9200
+  - OpenSearch Dashboards: localhost:5601
+
+
+================================================================================
+            ÉTAPE 2: DÉMARRER LE KAFKA STREAM CONSUMER
+================================================================================
+
+Cette application consomme les audits depuis Kafka et les indexe dans OpenSearch.
+
+1. Ouvrir un nouveau terminal
+
+2. Aller dans le répertoire:
+   $ cd /home/gbonaventure/sources/kiss/kockpit/kockpit-audit/\
+kockpit-audit-stream/kockpit-audit-stream-application-kafka
+
+3. Démarrer l'application:
+   $ mvn spring-boot:run -Dspring-boot.run.profiles=local
+
+4. Attendre le message:
+   Started KafkaStreamApplication in X.XXX seconds
+
+Configuration active:
+  - Port: 9080
+  - Kafka Consumer Group: kockpit-audit-stream
+  - Kafka Topic: audit
+  - OpenSearch: http://localhost:9200
+
+
+================================================================================
+              ÉTAPE 3: CONFIGURER LA DEMO APPLICATION
+================================================================================
+
+La demo app est déjà configurée pour envoyer les audits à Kafka.
+
+Configuration dans application.yaml:
+  spring:
+    kafka:
+      bootstrap-servers: localhost:9092
+      producer:
+        key-serializer: org.apache.kafka.common.serialization.StringSerializer
+        value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+  kockpit:
+    sdk:
+      domain: demo
+      env: local
+      appId: demo-app
+      enabled: true
+      service:
+        audit:
+          notification:
+            topic: audit
+
+
+Dépendances requises dans pom.xml:
+  - kockpit-audit-sdk
+  - kockpit-audit-annotation
+  - kockpit-audit-web-starter
+  - kockpit-audit-notification-starter-kafka
+
+
+================================================================================
+              ÉTAPE 4: DÉMARRER LA DEMO APPLICATION
+================================================================================
+
+1. Ouvrir un nouveau terminal
+
+2. Aller dans le répertoire:
+   $ cd /home/gbonaventure/sources/kiss/kockpit-demo-app
+
+3. Build (première fois):
+   $ mvn clean package -DskipTests
+
+4. Démarrer:
+   $ mvn spring-boot:run
+
+5. Attendre le message:
+   Started DemoApplication in X.XXX seconds
+
+Configuration active:
+  - Port: 8091
+  - Context Path: /demo/api
+
+
+================================================================================
+                 ÉTAPE 5: TESTER LE FLUX COMPLET
+================================================================================
+
+1. Créer un produit (génère un audit):
+   $ curl -X POST http://localhost:8091/demo/api/api/products \
+     -H "Content-Type: application/json" \
+     -d '{
+       "name": "Test Product Kafka",
+       "price": 99.99,
+       "stock": 10
+     }'
+
+   Réponse attendue:
+   {"success":true,"data":{"id":"xxx",...},...}
+
+
+2. Vérifier que l'audit est dans OpenSearch:
+   $ curl http://localhost:9200/_cat/indices?v
+
+   Vous devez voir un index comme:
+   demo-audit-data-local-ttl5d-2025.12.23-1
+
+
+3. Chercher les audits:
+   $ curl http://localhost:9200/*audit*/_search?pretty
+
+   Vous verrez l'audit complet avec:
+   - Requête HTTP (méthode, URI, headers, body)
+   - Réponse HTTP (status, body)
+   - Métadonnées (domain, env, appId, durée, timestamp)
+
+
+================================================================================
+            ÉTAPE 6: VISUALISER DANS OPENSEARCH DASHBOARDS
+================================================================================
+
+1. Ouvrir le navigateur:
+   http://localhost:5601
+
+2. Aller dans "Dashboards Management" (icône engrenage en bas)
+
+3. Cliquer sur "Index patterns"
+
+4. Cliquer "Create index pattern"
+
+5. Entrer le pattern: demo-audit-data-*
+
+6. Cliquer "Next step"
+
+7. Sélectionner le champ de temps: start
+
+8. Cliquer "Create index pattern"
+
+9. Aller dans "Discover" (menu de gauche)
+
+10. Ajuster le time range (en haut à droite) sur "Last 24 hours"
+
+11. Vous voyez maintenant tous vos audits en temps réel !
+
+
+Fonctionnalités disponibles:
+  - Recherche full-text dans les audits
+  - Filtres par méthode HTTP, statut, URI, etc.
+  - Timeline des audits
+  - Détails complets de chaque requête/réponse
+  - Création de visualisations personnalisées
+  - Dashboards avec métriques
+
+
+================================================================================
+                        ENDPOINTS DISPONIBLES
+================================================================================
+
+Demo Application:
+  Base URL: http://localhost:8091/demo/api
+
+  Products API:
+    GET    /api/products           - Liste tous les produits
+    GET    /api/products/{id}      - Détails d'un produit
+    POST   /api/products           - Créer un produit
+    PUT    /api/products/{id}      - Modifier un produit
+    DELETE /api/products/{id}      - Supprimer un produit
+
+  Actuator:
+    GET    /actuator/health        - Health check
+
+
+Kafka Stream Consumer:
+  Base URL: http://localhost:9080
+
+  Actuator:
+    GET    /actuator/health        - Health check
+
+
+OpenSearch:
+  Base URL: http://localhost:9200
+
+  Indices:
+    GET    /_cat/indices?v         - Liste des indices
+    GET    /{index}/_search        - Chercher dans un index
+    GET    /_cluster/health        - Santé du cluster
+
+
+OpenSearch Dashboards:
+  URL: http://localhost:5601
+  (Pas d'authentification en mode dev)
+
+
+================================================================================
+                        TESTER DIFFÉRENTS SCÉNARIOS
+================================================================================
+
+1. Créer un produit (POST):
+   $ curl -X POST http://localhost:8091/demo/api/api/products \
+     -H "Content-Type: application/json" \
+     -d '{"name":"Laptop","price":1299.99,"stock":5}'
+
+
+2. Lister les produits (GET):
+   $ curl http://localhost:8091/demo/api/api/products
+
+
+3. Modifier un produit (PUT):
+   $ curl -X PUT http://localhost:8091/demo/api/api/products/{id} \
+     -H "Content-Type: application/json" \
+     -d '{"name":"Laptop Pro","price":1499.99,"stock":3}'
+
+
+4. Supprimer un produit (DELETE):
+   $ curl -X DELETE http://localhost:8091/demo/api/api/products/{id}
+
+
+Chaque opération génère un audit complet qui apparaît immédiatement dans
+OpenSearch Dashboards !
+
+
+================================================================================
+                        ARCHITECTURE DÉTAILLÉE
+================================================================================
+
+Flux d'un audit:
+
+1. Application Demo:
+   - Méthode annotée avec @Audited
+   - Spring AOP intercepte l'appel
+   - SDK Kockpit capture requête + réponse
+
+2. Kafka Producer (dans Demo App):
+   - SDK sérialise l'audit en JSON
+   - Envoie au topic "audit" sur Kafka
+   - Kafka acknowledge la réception
+
+3. Kafka (broker):
+   - Stocke le message dans le topic
+   - Garantit la durabilité
+   - Gère le partitionnement
+
+4. Kafka Stream Consumer:
+   - Écoute le topic "audit"
+   - Consomme les messages par batch (max 50)
+   - Transforme via AuditReportMapper
+
+5. OpensearchIndexer:
+   - Reçoit les audits transformés
+   - Accumule dans un buffer
+   - Indexe par batch toutes les 5 secondes
+   - Crée/utilise l'index approprié selon domain/env/ttl
+
+6. OpenSearch:
+   - Stocke les audits indexés
+   - Gère la rotation des index par jour
+   - Applique le TTL (5 jours par défaut)
+
+7. OpenSearch Dashboards:
+   - Interface de visualisation
+   - Requêtes en temps réel
+   - Dashboards personnalisables
+
+
+Gestion des erreurs:
+  - Kafka: Retry automatique avec backoff
+  - Stream Consumer: DLQ (Dead Letter Queue) pour messages invalides
+  - OpenSearch: Retry sur échec d'indexation
+  - Application: Audit envoyé en asynchrone, pas d'impact sur l'utilisateur
+
+
+================================================================================
+                        CONFIGURATION AVANCÉE
+================================================================================
+
+Kafka Producer (dans Demo App):
+  Configuration dans application.yaml:
+    spring:
+      kafka:
+        bootstrap-servers: localhost:9092
+        producer:
+          acks: 1                    # Niveau de confirmation
+          retries: 3                 # Nombre de tentatives
+          batch-size: 16384          # Taille du batch
+          linger-ms: 10              # Délai avant envoi
+          compression-type: snappy   # Compression des messages
+
+
+Kafka Consumer (Stream App):
+  Configuration dans application.yml:
+    spring:
+      kafka:
+        consumer:
+          group-id: kockpit-audit-stream
+          max-poll-records: 50       # Nombre max par poll
+          auto-offset-reset: latest  # Démarrer au dernier offset
+          enable-auto-commit: false  # Commit manuel
+
+
+OpensearchIndexer:
+  Configuration dans application.yml:
+    kockpit:
+      audit:
+        stream:
+          opensearch:
+            scheduler_ms: 5000       # Fréquence d'indexation
+            endpoints: http://localhost:9200
+            index_suffix: audit-data
+
+
+Rotation des index:
+  Format: {domain}-audit-data-{env}-ttl{ttl}d-{date}
+  Exemple: demo-audit-data-local-ttl5d-2025.12.23-1
+
+  Rotation automatique:
+    - Nouvel index créé chaque jour à minuit
+    - TTL appliqué automatiquement
+    - Vieux index supprimés après expiration
+
+
+================================================================================
+                        MONITORING ET OBSERVABILITÉ
+================================================================================
+
+Métriques Kafka:
+  - Messages produits/consommés
+  - Lag du consumer
+  - Taille des batches
+  - Latence
+
+  Voir dans:
+    $ docker compose -f docker-compose-dev.yml logs kafka
+
+
+Métriques Stream Consumer:
+  URL: http://localhost:9080/actuator
+
+  Endpoints:
+    /actuator/health  - Santé de l'application
+    /actuator/metrics - Métriques détaillées
+
+
+Métriques OpenSearch:
+  URL: http://localhost:9200
+
+  Endpoints:
+    /_cluster/health             - Santé du cluster
+    /_cat/indices?v              - État des indices
+    /_nodes/stats                - Stats des nœuds
+    /{index}/_count              - Nombre de documents
+
+
+Logs:
+  - Demo App: Console où mvn spring-boot:run est lancé
+  - Stream Consumer: Console dédiée
+  - Kafka: docker compose logs kafka
+  - OpenSearch: docker compose logs opensearch-node1-dev
+
+
+================================================================================
+                        TROUBLESHOOTING
+================================================================================
+
+Problème: Les audits n'apparaissent pas dans OpenSearch
+Solution:
+  1. Vérifier que Kafka est démarré:
+     $ docker ps | grep kafka
+
+  2. Vérifier que le Stream Consumer tourne:
+     Voir les logs, doit afficher "Started KafkaStreamApplication"
+
+  3. Vérifier les logs du Stream Consumer:
+     Rechercher "indexing took X ms" - confirme l'indexation
+
+  4. Vérifier les topics Kafka:
+     $ docker exec -it kafka-dev kafka-topics --list \
+       --bootstrap-server localhost:9092
+     Doit contenir le topic "audit"
+
+  5. Vérifier le consumer lag:
+     Si lag > 0, le consumer est en retard
+
+
+Problème: Demo app ne démarre pas - erreur Kafka
+Solution:
+  1. Vérifier que Kafka est accessible:
+     $ nc -zv localhost 9092
+
+  2. Vérifier la configuration dans application.yaml:
+     spring.kafka.bootstrap-servers: localhost:9092
+
+  3. Vérifier les dépendances Maven:
+     kockpit-audit-notification-starter-kafka doit être présente
+
+
+Problème: Stream Consumer ne consomme pas
+Solution:
+  1. Vérifier le topic dans les logs du consumer:
+     Doit afficher "topics: audit"
+
+  2. Vérifier que le topic existe dans Kafka:
+     $ docker exec -it kafka-dev kafka-topics --describe \
+       --topic audit --bootstrap-server localhost:9092
+
+  3. Vérifier le consumer group:
+     $ docker exec -it kafka-dev kafka-consumer-groups --list \
+       --bootstrap-server localhost:9092
+     Doit contenir "kockpit-audit-stream"
+
+
+Problème: OpenSearch Dashboards ne montre rien
+Solution:
+  1. Vérifier le time range (en haut à droite)
+     Mettre sur "Last 24 hours" ou "Last 7 days"
+
+  2. Vérifier l'index pattern:
+     Doit être "demo-audit-data-*"
+
+  3. Vérifier le champ de temps:
+     Utiliser "start" et non "@timestamp"
+
+  4. Refresh l'index pattern:
+     Dashboards Management → Index Patterns → Refresh
+
+
+Problème: Erreur "ConfigApiService bean not found"
+Solution:
+  1. Vérifier les profils Maven lors du build:
+     mvn spring-boot:run -P filesystem,opensearch
+
+  2. Les profils Spring ne suffisent pas, il faut aussi les profils Maven
+
+
+Problème: Port 9092 déjà utilisé
+Solution:
+  1. Trouver le processus:
+     $ sudo lsof -i :9092
+
+  2. Arrêter l'ancien Kafka:
+     $ docker stop kafka-dev
+
+  3. Redémarrer proprement:
+     $ docker compose -f docker-compose-dev.yml down
+     $ docker compose -f docker-compose-dev.yml up -d
+
+
+================================================================================
+                        ARRÊTER LES SERVICES
+================================================================================
+
+Ordre recommandé:
+
+1. Arrêter la Demo App:
+   Ctrl+C dans le terminal
+
+2. Arrêter le Stream Consumer:
+   Ctrl+C dans le terminal
+
+3. Arrêter Kafka + OpenSearch:
+   $ cd /home/gbonaventure/sources/kiss/os-kafka
+   $ docker compose -f docker-compose-dev.yml down
+
+Note: Les données OpenSearch sont persistées dans un volume Docker
+      Elles seront conservées même après l'arrêt
+
+
+Pour tout nettoyer (⚠️ PERD LES DONNÉES):
+  $ docker compose -f docker-compose-dev.yml down -v
+
+
+================================================================================
+                        PROCHAINES ÉTAPES
+================================================================================
+
+1. Intégrer d'autres applications avec le SDK Kockpit
+
+2. Créer des dashboards personnalisés dans OpenSearch Dashboards:
+   - Graphique du nombre de requêtes par statut HTTP
+   - Timeline des audits par heure
+   - Top 10 des endpoints les plus appelés
+   - Durée moyenne par endpoint
+
+3. Configurer des alertes sur les erreurs (status >= 500)
+
+4. Ajouter des règles métier avec kockpit-rules
+
+5. Déployer en production avec :
+   - Cluster Kafka multi-brokers
+   - Cluster OpenSearch avec réplication
+   - Monitoring avec Prometheus + Grafana
+
+6. Explorer l'UI Audit Console React:
+   $ cd kockpit/kockpit-audit/kockpit-audit-console-ui
+   $ npm install
+   $ npm run dev
+
+
+================================================================================
+                        RESSOURCES UTILES
+================================================================================
+
+Documentation:
+  - Apache Kafka: https://kafka.apache.org/documentation/
+  - OpenSearch: https://opensearch.org/docs/latest/
+  - Spring Kafka: https://spring.io/projects/spring-kafka
+  - Kockpit Architecture: ./ARCHITECTURE.txt
+
+Fichiers de configuration:
+  - Infrastructure: /home/gbonaventure/sources/kiss/os-kafka/docker-compose-dev.yml
+  - Demo App: /home/gbonaventure/sources/kiss/kockpit-demo-app/src/main/resources/application.yaml
+  - Stream Consumer: /home/gbonaventure/sources/kiss/kockpit/kockpit-audit/kockpit-audit-stream/kockpit-audit-stream-application-kafka/src/main/resources/application.yml
+
+
+================================================================================
+                        RÉSUMÉ DES PORTS
+================================================================================
+
+| Service                  | Port  | URL                          |
+|--------------------------|-------|------------------------------|
+| Demo App                 | 8091  | http://localhost:8091        |
+| Kafka Stream Consumer    | 9080  | http://localhost:9080        |
+| Kafka                    | 9092  | localhost:9092               |
+| OpenSearch               | 9200  | http://localhost:9200        |
+| OpenSearch Dashboards    | 5601  | http://localhost:5601        |
+
+
+================================================================================
+                        BON DÉVELOPPEMENT !
+================================================================================
