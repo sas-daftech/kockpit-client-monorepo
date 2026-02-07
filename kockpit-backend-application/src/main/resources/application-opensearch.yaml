@@ -1,0 +1,9 @@
+kockpit:
+  audit:
+    opensearch:
+      index: ${INDEX_NAME:kockpit-audit}
+      endpoints: ${OPENSEARCH_ENDPOINTS:http://localhost:9200}
+  backend:
+    opensearch:
+      index: ${INDEX_NAME:kockpit-audit}
+      endpoints: ${OPENSEARCH_ENDPOINTS:http://localhost:9200}

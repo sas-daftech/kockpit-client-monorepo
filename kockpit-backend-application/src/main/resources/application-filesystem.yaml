@@ -1,0 +1,10 @@
+kockpit:
+  audit:
+    local:
+      storage-path: ${user.home}/kockpit/data/manifests
+  sdk:
+    filesystem:
+      local_directory: ${user.home}/kockpit/data
+  communication:
+    filesystem:
+      path: ${user.home}/kockpit/data

@@ -1,0 +1,181 @@
+# Kockpit Client Monorepo - Git Ignore File
+
+# ============================================================================
+# Java / Maven
+# ============================================================================
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# Class files
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+
+# Log files
+*.log
+logs/
+
+# Maven
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.properties
+
+# ============================================================================
+# IDE - IntelliJ IDEA
+# ============================================================================
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+.idea_modules/
+
+# ============================================================================
+# IDE - Eclipse
+# ============================================================================
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+
+# ============================================================================
+# IDE - VS Code
+# ============================================================================
+.vscode/
+*.code-workspace
+
+# ============================================================================
+# Operating System
+# ============================================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
+# ============================================================================
+# Spring Boot
+# ============================================================================
+spring.log
+application-*.properties.bak
+*.pid
+
+# ============================================================================
+# Docker
+# ============================================================================
+# Ignore Docker volumes but not compose files
+docker-volumes/
+*.dockerignore
+
+# ============================================================================
+# OpenSearch / Elasticsearch
+# ============================================================================
+# OpenSearch data (if running locally)
+opensearch-data/
+elasticsearch-data/
+
+# ============================================================================
+# Kafka
+# ============================================================================
+# Kafka data (if running locally)
+kafka-data/
+kafka-logs/
+zookeeper-data/
+
+# ============================================================================
+# Kockpit Specific
+# ============================================================================
+# Data directories
+data/
+kockpit-storage/
+kockpit-data/
+*/data/
+*/kockpit-storage/
+
+# Manifest files (filesystem storage)
+manifests/
+*/manifests/
+
+# ============================================================================
+# Build artifacts
+# ============================================================================
+build/
+dist/
+*.zip
+*.tar.gz
+*.tgz
+
+# ============================================================================
+# Temporary files
+# ============================================================================
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
+*.orig
+
+# ============================================================================
+# Security / Secrets
+# ============================================================================
+# Never commit secrets!
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+secrets/
+credentials.json
+.env.local
+.env.*.local
+
+# Application secrets (use environment variables instead)
+application-secrets.yaml
+application-secrets.yml
+application-prod.yaml
+application-prod.yml
+
+# ============================================================================
+# Node.js (if any frontend)
+# ============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ============================================================================
+# Test coverage
+# ============================================================================
+coverage/
+.nyc_output/
+*.lcov
+
+# ============================================================================
+# Documentation build artifacts
+# ============================================================================
+*.pdf
+site/
+
+# ============================================================================
+# Keep these files
+# ============================================================================
+# Force include certain files even if they match patterns above
+!.gitkeep
+!.mvn/wrapper/maven-wrapper.jar

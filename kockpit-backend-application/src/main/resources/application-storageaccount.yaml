@@ -1,0 +1,15 @@
+kockpit:
+  sdk:
+    azure:
+      storage:
+        endpoint: ${STORAGE_ENDPOINT}
+        account: ${STORAGE_ACCOUNT}
+        key: ${STORAGE_KEY}
+        container: ${STORAGE_CONTAINER}
+  audit:
+    azure:
+      storage:
+        endpoint: ${STORAGE_ENDPOINT}
+        account: ${STORAGE_ACCOUNT}
+        key: ${STORAGE_KEY}
+        container: ${STORAGE_CONTAINER}
