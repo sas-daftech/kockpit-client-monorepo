@@ -14,6 +14,9 @@ spring:
 
 # Kockpit SDK Configuration
 kockpit:
+  domain: demo                      # Application domain (root level for audit system)
+  env: ${ENVIRONMENT:local}         # Environment (root level for audit system)
+  appId: demo-app                   # Application identifier (root level for audit system)
   sdk:
     domain: demo                    # Application domain
     env: ${ENVIRONMENT:local}       # Environment (local, dev, prod)
@@ -23,6 +26,10 @@ kockpit:
       audit:
         notification:
           topic: audit              # Kafka topic for audit events
+  audit:
+    notification:
+      kafka:
+        topic: audit                # Kafka topic for audit notifications
 
 # Kafka Mode: Audits are sent to Kafka topic "audit" instead of HTTP backend
 # The kockpit-audit-stream-application-kafka consumes from Kafka and indexes to OpenSearch
