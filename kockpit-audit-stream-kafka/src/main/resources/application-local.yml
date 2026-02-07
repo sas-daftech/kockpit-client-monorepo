@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: kockpit-audit-stream-kafka
+  main:
+    allow-bean-definition-overriding: true  # Allow local override of kafkaStreamListener bean
   kafka:
     bootstrap-servers:
       - localhost:9092
