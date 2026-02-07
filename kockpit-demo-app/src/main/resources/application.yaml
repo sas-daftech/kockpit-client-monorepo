@@ -1,0 +1,48 @@
+server:
+  port: 8091
+  servlet:
+    context-path: /demo/api
+
+spring:
+  application:
+    name: kockpit-demo-app
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+# Kockpit SDK Configuration
+kockpit:
+  sdk:
+    domain: demo                    # Application domain
+    env: ${ENVIRONMENT:local}       # Environment (local, dev, prod)
+    appId: demo-app                 # Application identifier
+    enabled: true                   # Enable audit
+    service:
+      audit:
+        notification:
+          topic: audit              # Kafka topic for audit events
+
+# Kafka Mode: Audits are sent to Kafka topic "audit" instead of HTTP backend
+# The kockpit-audit-stream-application-kafka consumes from Kafka and indexes to OpenSearch
+# See: kockpit-demo-app/kockpit-doc/KAFKA-QUICK-START.txt for setup instructions
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.kockpit.demo: DEBUG
+    org.kockpit: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always

@@ -1,0 +1,13 @@
+# Local development configuration
+
+kockpit:
+  sdk:
+    env: local
+  audit:
+    backend:
+      url: http://localhost:8080/backend/api
+
+logging:
+  level:
+    com.kockpit.demo: DEBUG
+    org.kockpit: DEBUG

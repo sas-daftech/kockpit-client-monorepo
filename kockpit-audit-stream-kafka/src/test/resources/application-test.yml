@@ -1,0 +1,31 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: kockpit-audit-stream
+  kafka:
+    bootstrap-servers:
+      - ${BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${spring.application.name}
+      properties:
+        security.protocol: plaintext
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+kockpit:
+  audit:
+    stream:
+      kafka:
+        topics: audit
+      azure:
+        search:
+          endpoint: ${AZURESEARCH_ENDPOINT:http://localhost}
+          index_name: ${AZURESEARCH_INDEX:audit}
+          api_key: ${AZURESEARCH_APIKEY:anykey}
+          scheduler_ms: 10000

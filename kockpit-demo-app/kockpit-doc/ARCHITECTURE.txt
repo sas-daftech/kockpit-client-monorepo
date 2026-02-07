@@ -1,0 +1,1329 @@
+================================================================================
+                    KOCKPIT BACKENDS - ARCHITECTURE
+================================================================================
+
+Date: 2025-12-01
+Version: 1.0.0-SNAPSHOT
+
+================================================================================
+                           TABLE DES MATIERES
+================================================================================
+
+1. INTRODUCTION
+2. ARCHITECTURE GLOBALE
+3. MODULES PRINCIPAUX
+   3.1 kockpit-backend-application
+   3.2 kockpit-backend-authentication-basic
+   3.3 kockpit-backend-service-search
+   3.4 kockpit-backend-service-storage
+   3.5 kockpit-service-featureflipping
+4. FLUX DE DONNEES
+   4.1 Flux de recherche d'audit
+   4.2 Flux de sauvegarde de configuration
+   4.3 Flux d'audit événementiel avec Kafka (Event-Driven)
+5. PATTERNS ARCHITECTURAUX
+6. CONFIGURATION
+7. SECURITE
+8. DEPLOIEMENT
+9. DEVELOPPEMENT LOCAL
+
+
+================================================================================
+1. INTRODUCTION
+================================================================================
+
+Kockpit Backends est une application Spring Boot qui fournit des APIs REST
+pour la gestion d'audits, de configurations et de feature flags.
+
+Caractéristiques principales :
+  - Architecture modulaire hexagonale (Ports & Adapters)
+  - Multi-tenant par URL (domain/env)
+  - Adapters multiples : OpenSearch, Filesystem, Azure
+  - API REST documentée OpenAPI
+  - Authentification Basic HTTP
+
+
+================================================================================
+2. ARCHITECTURE GLOBALE
+================================================================================
+
+                         +-------------------+
+                         |   Client HTTP     |
+                         +-------------------+
+                                  |
+                                  v
+                    +-------------------------+
+                    | Spring Security (Basic) |
+                    +-------------------------+
+                                  |
+                +----------------------------------+
+                |                                  |
+                v                                  v
+        +---------------+                  +---------------+
+        |   SearchApi   |                  |  ConfigApi    |
+        +---------------+                  +---------------+
+                |                                  |
+                v                                  v
+        +---------------+                  +---------------+
+        | SearchService |                  |ConfigApiService|
+        +---------------+                  +---------------+
+                |                                  |
+        +-------+-------+              +-----------+-----------+
+        |               |              |                       |
+        v               v              v                       v
+  +-----------+  +-----------+  +------------+      +--------------+
+  |OpenSearch |  |Elasticsearch| |Filesystem  |     |Azure Storage |
+  +-----------+  +-----------+  +------------+      +--------------+
+
+
+Pattern: Hexagonal Architecture
+ - API Layer = Ports (interfaces)
+ - Implementation Layer = Adapters (opensearch, filesystem, azure)
+
+
+================================================================================
+3. MODULES PRINCIPAUX
+================================================================================
+
+--------------------------------------------------------------------------------
+3.1 kockpit-backend-application
+--------------------------------------------------------------------------------
+
+Role: Application Spring Boot principale (point d'entrée)
+
+Responsabilites:
+  - Demarrage de l'application
+  - Configuration Spring Boot
+  - Assembly des modules via profiles Maven
+  - Gestion des profils d'environnement
+
+Configuration:
+  - Port: 8080
+  - Context Path: /backend/api
+  - Profiles: opensearch, local, filesystem, azure
+
+Fichiers cles:
+  src/main/java/org/kockpit/backend/
+    └── KockpitAuditBackendApplication.java  (Main class)
+
+  src/main/resources/
+    ├── application.yaml                      (Config de base)
+    ├── application-local.yaml                (Config dev local)
+    ├── application-opensearch.yaml           (Config OpenSearch)
+    └── application-storageaccount.yaml       (Config Azure)
+
+Profils Maven disponibles:
+  - opensearch   : Active le backend OpenSearch (par defaut)
+  - filesystem   : Active le storage filesystem
+  - azure        : Active le storage Azure
+
+
+--------------------------------------------------------------------------------
+3.2 kockpit-backend-authentication-basic
+--------------------------------------------------------------------------------
+
+Role: Module d'authentification et securite
+
+Composants:
+  - SecurityConfig.java : Configuration Spring Security
+  - Me.java : Endpoint pour obtenir l'utilisateur courant
+
+Configuration par defaut:
+  Username: user
+  Password: password (a changer en production!)
+
+Caracteristiques:
+  - Authentification Basic HTTP
+  - CORS active pour tous les origins
+  - CSRF desactive (API REST stateless)
+  - Sessions stateless (pas de session serveur)
+  - Utilisateur en memoire (InMemoryUserDetailsManager)
+
+Endpoints exposes:
+  GET /me : Informations de l'utilisateur connecte
+
+Configuration YAML:
+  kockpit:
+    username: user        # Configurable
+    password: changeme    # Configurable
+
+IMPORTANT: Cette configuration est pour le developpement. En production:
+  - Utiliser JWT ou OAuth2
+  - Externaliser les credentials
+  - Activer HTTPS
+  - Durcir les regles de securite
+
+
+--------------------------------------------------------------------------------
+3.3 kockpit-backend-service-search
+--------------------------------------------------------------------------------
+
+Role: Service de recherche et recuperation des audits
+
+Structure:
+  kockpit-backend-service-search/
+    ├── kockpit-backend-service-search-api/          (API - Port)
+    └── kockpit-backend-service-search-opensearch/   (Impl - Adapter)
+
+
+>>> 3.3.1 kockpit-backend-service-search-api
+
+Contenu: API REST et interfaces
+
+Endpoints exposes:
+  GET    /{domain}/{env}/audits
+    -> Liste les audits avec pagination
+    Params: start (default: 0), size (default: 50)
+
+  GET    /{domain}/{env}/audits/{id}
+    -> Recupere un audit specifique par ID
+
+  GET    /{domain}/{env}/audits/_search
+    -> Recherche avec parametres de query
+
+  POST   /{domain}/{env}/audits/_search
+    -> Recherche avancee avec criteres (body JSON)
+
+Classes principales:
+  SearchApi.java       : RestController (genere par OpenAPI)
+  SearchService.java   : Interface du service
+  Page.java            : Modele de pagination
+  SearchTerm.java      : Criteres de recherche
+
+Modele de reponse (Page):
+  {
+    "size": 50,
+    "items": [...],
+    "total_count": 123
+  }
+
+
+>>> 3.3.2 kockpit-backend-service-search-opensearch
+
+Contenu: Implementation OpenSearch du service de recherche
+
+Classes principales:
+  OpenSearchAutoConfiguration.java  : Auto-configuration Spring Boot
+  OpensearchRepository.java         : Implementation du repository
+  SearchQueryHelper.java            : Construction des requetes OpenSearch
+  AuditReportHelper.java            : Transformation des resultats
+
+Configuration requise:
+  kockpit:
+    audit:
+      opensearch:
+        endpoints: http://localhost:9200
+        index: kockpit-audit
+
+Fonctionnement:
+  1. Connexion au cluster OpenSearch via RestHighLevelClient
+  2. Construction de requetes DSL via SearchQueryHelper
+  3. Execution des recherches
+  4. Transformation des hits en objets Java
+  5. Retour avec pagination
+
+
+--------------------------------------------------------------------------------
+3.4 kockpit-backend-service-storage
+--------------------------------------------------------------------------------
+
+Role: Service de stockage de configurations
+
+Structure:
+  kockpit-backend-service-storage/
+    ├── kockpit-backend-service-storage-api/         (API - Port)
+    ├── kockpit-backend-service-storage-filesystem/  (Adapter FS)
+    └── kockpit-backend-service-storage-azure/       (Adapter Azure)
+
+
+>>> 3.4.1 kockpit-backend-service-storage-api
+
+Contenu: API de gestion des configurations
+
+Endpoints exposes:
+  GET    /config
+    -> Liste tous les manifests de configuration
+    Response: Liste de Manifest[]
+
+  POST   /config
+    -> Cree une nouvelle configuration
+    Body: ConfigItem (JSON)
+    Response: ConfigItem cree
+
+Classes principales:
+  ConfigApi.java         : RestController
+  ConfigApiService.java  : Interface du service
+  ConfigItem.java        : Item de configuration individuel
+  Manifest.java          : Regroupement de configurations
+  Service.java           : Modele de service
+
+Modele ConfigItem:
+  {
+    "key": "string",
+    "value": "string",
+    "service": {...},
+    ...
+  }
+
+Modele Manifest:
+  {
+    "name": "manifest-name",
+    "configs": [...]
+  }
+
+
+>>> 3.4.2 kockpit-backend-service-storage-filesystem
+
+Contenu: Implementation filesystem local (developpement)
+
+Classe principale:
+  FileSystemRepository.java : Stockage sur disque en JSON
+
+Configuration:
+  kockpit:
+    audit:
+      local:
+        storage-path: /tmp/kockpit-storage
+
+Fonctionnement:
+  - Chaque ConfigItem est stocke dans un fichier JSON unique
+  - Nom du fichier: UUID genere aleatoirement
+  - Serialization/Deserialisation via Jackson ObjectMapper
+  - Support des dates Java 8+ (JavaTimeModule)
+  - Lecture: scan du repertoire et parsing de tous les fichiers
+
+Exemple de fichier genere:
+  /tmp/kockpit-storage/a1b2c3d4-e5f6-7890-abcd-ef1234567890
+
+  Contenu (JSON):
+  {
+    "key": "feature.payment",
+    "value": "enabled",
+    "timestamp": "2025-12-01T21:00:00Z"
+  }
+
+
+>>> 3.4.3 kockpit-backend-service-storage-azure
+
+Contenu: Implementation Azure Storage Account (production)
+
+Classe principale:
+  StorageAccountFilesRepository.java : Stockage Azure Blob
+
+Configuration:
+  kockpit:
+    audit:
+      azure:
+        storage:
+          endpoint: https://xxx.blob.core.windows.net
+          account: storage-account-name
+          key: storage-account-key
+          container: kockpit-configs
+
+Fonctionnement:
+  - Stockage dans Azure Blob Storage
+  - Un blob par configuration
+  - Connexion via Azure SDK
+  - Support de la haute disponibilite Azure
+
+
+--------------------------------------------------------------------------------
+3.5 kockpit-service-featureflipping
+--------------------------------------------------------------------------------
+
+Role: Gestion des feature flags (activation/desactivation dynamique)
+
+Structure:
+  kockpit-service-featureflipping/
+    ├── kockpit-service-backend-featureflipping-api/
+    ├── kockpit-service-backend-featureflipping-filesystem/
+    └── kockpit-service-backend-featureflipping-storageaccount/
+
+
+>>> 3.5.1 API
+
+Endpoints exposes:
+  PUT    /{domain}/{env}/feature-flipping?key=xxx
+    -> Active ou desactive une feature
+    Body: FeatureFlippingDto
+    Response: FeatureFlippingDto mis a jour
+
+  GET    /{domain}/{env}/feature-flipping/history
+    -> Historique des modifications de features
+    Response: Liste FeatureFlippingHistory[]
+
+Classes principales:
+  FeatureFlippingApi.java      : RestController
+  FeatureFlippingService.java  : Interface du service
+  FeatureFlippingDto.java      : DTO de feature flag
+  FeatureFlippingHistory.java  : Historique des changements
+
+Cas d'usage:
+  - Activer/desactiver une fonctionnalite sans redemarrage
+  - Rollback rapide en cas de probleme
+  - A/B testing
+  - Deploiement progressif (canary deployment)
+
+Exemple d'utilisation:
+  # Activer la feature "new-payment"
+  PUT /rcu/prod/feature-flipping?key=new-payment
+  Body: {"enabled": true, "percentage": 10}
+
+  # Voir l'historique
+  GET /rcu/prod/feature-flipping/history
+
+
+>>> 3.5.2 Implementations
+
+Filesystem:
+  - Stockage local en JSON
+  - Pour developpement
+
+Storage Account:
+  - Stockage Azure Blob
+  - Pour production
+
+
+================================================================================
+4. FLUX DE DONNEES
+================================================================================
+
+--------------------------------------------------------------------------------
+4.1 Flux de recherche d'audit
+--------------------------------------------------------------------------------
+
+1. Client envoie:
+   GET /rcu/local/audits/_search?start=0&size=10
+   Authorization: Basic dXNlcjpwYXNzd29yZA==
+
+2. Spring Security valide l'authentification
+
+3. SearchApi recoit la requete
+   - Extrait domain=rcu, env=local
+   - Extrait start=0, size=10
+
+4. SearchService construit la requete
+   - Validation des parametres
+   - Construction des criteres de recherche
+
+5. OpensearchRepository execute
+   - Connexion a OpenSearch
+   - Construction de la requete DSL
+   - Execution de la recherche sur l'index "kockpit-audit"
+
+6. OpenSearch retourne les resultats
+   - Hits matches
+   - Total count
+
+7. Transformation en Page
+   - Mapping des hits vers objets Java
+   - Construction de l'objet Page
+
+8. Reponse au client
+   {
+     "size": 10,
+     "items": [...],
+     "total_count": 156
+   }
+
+
+--------------------------------------------------------------------------------
+4.2 Flux de sauvegarde de configuration
+--------------------------------------------------------------------------------
+
+1. Client envoie:
+   POST /config
+   Body: {"key": "app.timeout", "value": "30s"}
+   Authorization: Basic dXNlcjpwYXNzd29yZA==
+
+2. Spring Security valide
+
+3. ConfigApi recoit la requete
+   - Deserialisation du JSON en ConfigItem
+
+4. ConfigApiService traite
+   - Validation du ConfigItem
+   - Generation d'un UUID
+
+5. FileSystemRepository sauvegarde
+   - Serialisation en JSON
+   - Ecriture dans /tmp/kockpit-storage/[UUID]
+
+6. Reponse au client
+   ConfigItem avec ID genere
+
+
+--------------------------------------------------------------------------------
+4.3 Flux d'audit événementiel avec Kafka (Architecture Event-Driven)
+--------------------------------------------------------------------------------
+
+Une architecture alternative pour la capture et l'indexation des audits
+utilise Apache Kafka pour un traitement asynchrone et scalable.
+
+Architecture globale:
+
+  Application avec @Audited
+         |
+         v
+  kockpit-audit-sdk (AOP)
+         |
+         v
+  KafkaAuditReportNotificationService
+         |
+         v
+  Apache Kafka (Topic: "audit")
+         |
+         v
+  kockpit-audit-stream-application-kafka
+         |
+         v
+  OpensearchIndexer
+         |
+         v
+  OpenSearch
+         |
+         v
+  OpenSearch Dashboards
+
+
+>>> 4.3.1 Flux détaillé
+
+1. Application cliente (@Audited)
+   - Méthode annotée avec @Audited est interceptée par Spring AOP
+   - L'annotation capture automatiquement les paramètres d'entrée/sortie
+
+2. kockpit-audit-sdk (Producer)
+   - AuditFilter intercepte l'appel de méthode
+   - Construit un AuditReportDto avec:
+     * Timestamp (start, end)
+     * User information
+     * Method signature
+     * Input/Output parameters
+     * Application context (domain, env, appId)
+
+3. KafkaAuditReportNotificationService
+   - Sérialise l'AuditReportDto en JSON
+   - Envoie au topic Kafka configuré (ex: "audit")
+   - Mode asynchrone: ne bloque pas l'application
+   - Retry automatique en cas d'échec
+
+4. Apache Kafka
+   - Stocke les messages dans le topic "audit"
+   - Garantit la durabilité (persistence sur disque)
+   - Permet le scaling horizontal (partitions)
+   - Découple complètement le producer du consumer
+
+5. kockpit-audit-stream-application-kafka (Consumer)
+   - Port: 9080
+   - Consumer group: kockpit-audit-stream
+   - Écoute en continu le topic "audit"
+   - Traite les messages par batch (max-poll-records: 50)
+   - Accumule les audits en mémoire
+
+6. OpensearchIndexer (Scheduled Task)
+   - Scheduler configurable (défaut: 5000ms)
+   - Indexe par batch dans OpenSearch
+   - Gère les erreurs et retry
+   - Optimise les performances (bulk indexing)
+
+7. OpenSearch
+   - Index pattern: {domain}-audit-data-{env}-ttl{X}d-{date}
+   - Exemple: demo-audit-data-local-ttl5d-2025.12.23-1
+   - TTL automatique selon la rétention configurée
+   - Recherche full-text sur tous les champs
+
+8. OpenSearch Dashboards
+   - Visualisation temps réel des audits
+   - Création d'index patterns (ex: demo-audit-data-*)
+   - Discover: exploration interactive
+   - Dashboard: tableaux de bord personnalisés
+
+
+>>> 4.3.2 Configuration Producer (Demo App)
+
+Application.yaml:
+
+  spring:
+    kafka:
+      bootstrap-servers: localhost:9092
+      producer:
+        key-serializer: org.apache.kafka.common.serialization.StringSerializer
+        value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+  kockpit:
+    sdk:
+      domain: demo
+      env: local
+      appId: demo-app
+      enabled: true
+      service:
+        audit:
+          notification:
+            topic: audit   # Topic Kafka
+
+Dépendances Maven:
+
+  <dependency>
+    <groupId>org.kockpit</groupId>
+    <artifactId>kockpit-audit-notification-starter-kafka</artifactId>
+  </dependency>
+
+Auto-configuration Spring Boot:
+  - KafkaAuditServiceAutoConfiguration détecte la présence de KafkaTemplate
+  - Crée automatiquement KafkaAuditReportNotificationService
+  - Injecte la configuration depuis application.yaml
+
+
+>>> 4.3.3 Configuration Consumer (Stream Application)
+
+Application.yml:
+
+  spring:
+    application:
+      name: kockpit-audit-stream
+    kafka:
+      bootstrap-servers: localhost:9092
+      consumer:
+        group-id: kockpit-audit-stream
+        max-poll-records: 50
+
+  kockpit:
+    audit:
+      stream:
+        kafka:
+          topics: audit
+        opensearch:
+          endpoints: http://localhost:9200
+          index_suffix: audit-data
+          scheduler_ms: 5000     # Indexation toutes les 5 secondes
+
+Module Maven:
+  kockpit-audit/
+    kockpit-audit-stream/
+      kockpit-audit-stream-application-kafka/
+
+Démarrage:
+
+  cd kockpit/kockpit-audit/kockpit-audit-stream/kockpit-audit-stream-application-kafka
+  mvn spring-boot:run -Dspring-boot.run.profiles=local
+
+
+>>> 4.3.4 Avantages de l'architecture Kafka
+
+Performance:
+  - Traitement asynchrone: pas d'impact sur l'application cliente
+  - Batch processing: indexation optimisée dans OpenSearch
+  - Horizontal scaling: augmenter le nombre de partitions/consumers
+
+Fiabilité:
+  - Persistence Kafka: aucune perte de message
+  - Retry automatique: gestion des erreurs réseau
+  - Découplage: l'application fonctionne même si OpenSearch est down
+
+Scalabilité:
+  - Partitionnement Kafka: distribution de charge
+  - Multiple consumers: traitement parallèle
+  - Buffer naturel: absorbe les pics de charge
+
+Observabilité:
+  - Kafka consumer lag: monitoring de la latence
+  - Actuator endpoints: health checks
+  - Logs structurés: debugging facilité
+
+
+>>> 4.3.5 Monitoring
+
+Vérifier la santé du système:
+
+  # Demo app
+  curl http://localhost:8091/actuator/health
+
+  # Stream consumer
+  curl http://localhost:9080/actuator/health
+
+  # OpenSearch
+  curl http://localhost:9200/_cluster/health
+
+Kafka consumer lag:
+
+  docker exec -it kafka-dev kafka-consumer-groups \
+    --bootstrap-server localhost:9092 \
+    --describe --group kockpit-audit-stream
+
+Compter les documents OpenSearch:
+
+  curl http://localhost:9200/demo-audit-data-*/_count
+
+
+>>> 4.3.6 Comparaison avec l'architecture HTTP directe
+
+Architecture HTTP (POST direct au backend):
+  ✓ Simple: un seul hop
+  ✓ Latence faible: synchrone
+  ✗ Couplage fort: backend doit être up
+  ✗ Scalabilité limitée: backend peut être un bottleneck
+  ✗ Risque de perte: si backend down, audits perdus
+
+Architecture Kafka (Event-driven):
+  ✓ Découplage complet: backend pas nécessaire
+  ✓ Scalabilité haute: ajout de partitions/consumers
+  ✓ Fiabilité: persistence des messages
+  ✓ Performance: traitement asynchrone et par batch
+  ✗ Complexité: infrastructure Kafka à gérer
+  ✗ Latence d'indexation: délai de quelques secondes
+
+Recommandations:
+  - Développement local: HTTP direct (simplicité)
+  - Production haute charge: Kafka (scalabilité + fiabilité)
+  - Production moyenne charge: au choix selon contraintes
+
+
+================================================================================
+5. PATTERNS ARCHITECTURAUX
+================================================================================
+
+--------------------------------------------------------------------------------
+5.1 Hexagonal Architecture (Ports & Adapters)
+--------------------------------------------------------------------------------
+
+Principe:
+  Le coeur applicatif (domain) ne depend pas de l'infrastructure.
+  L'infrastructure depend du domaine.
+
+Structure:
+  API (Ports)              : Interfaces et contrats
+    |
+    +-> SearchService      : Interface
+    +-> ConfigApiService   : Interface
+
+  Adapters                 : Implementations concretes
+    |
+    +-> OpensearchRepository     : Impl OpenSearch
+    +-> FileSystemRepository     : Impl Filesystem
+    +-> AzureRepository          : Impl Azure
+
+Avantages:
+  - Changement d'implementation sans impact sur le code metier
+  - Tests unitaires faciles (mock des adapters)
+  - Ajout de nouveaux adapters simple
+
+
+--------------------------------------------------------------------------------
+5.2 Strategy Pattern
+--------------------------------------------------------------------------------
+
+Le choix de l'adapter se fait via les profils Maven:
+
+  Profile "opensearch"  -> OpensearchRepository
+  Profile "filesystem"  -> FileSystemRepository
+  Profile "azure"       -> AzureRepository
+
+Configuration dans pom.xml:
+  <profiles>
+    <profile>
+      <id>opensearch</id>
+      <dependencies>
+        <dependency>
+          <artifactId>kockpit-backend-service-search-opensearch</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
+
+Activation:
+  mvn clean package -P opensearch,filesystem
+
+
+--------------------------------------------------------------------------------
+5.3 Auto-configuration Spring Boot
+--------------------------------------------------------------------------------
+
+Chaque adapter fournit sa propre @AutoConfiguration:
+
+  @AutoConfiguration
+  public class OpenSearchAutoConfiguration {
+
+    @Bean
+    RestHighLevelClient restHighLevelClient(...) {
+      // Creation du client OpenSearch
+    }
+
+    @Bean
+    SearchService opensearchRepository(...) {
+      // Creation du repository
+    }
+  }
+
+Avantages:
+  - Configuration automatique basee sur le classpath
+  - Pas de configuration XML
+  - Convention over configuration
+
+
+--------------------------------------------------------------------------------
+5.4 Multi-tenancy par URL
+--------------------------------------------------------------------------------
+
+Principe:
+  Isolation des donnees par domain et environnement dans l'URL
+
+Structure:
+  /{domain}/{env}/resource
+
+  Exemples:
+    /rcu/local/audits      -> Domaine RCU, environnement local
+    /payment/prod/audits   -> Domaine Payment, environnement prod
+
+Avantages:
+  - Isolation claire des donnees
+  - Un seul deploiement pour plusieurs clients
+  - Routage simple
+  - Cache par tenant
+
+Configuration actuelle:
+  domain: rcu
+  env: local
+
+
+================================================================================
+6. CONFIGURATION
+================================================================================
+
+--------------------------------------------------------------------------------
+6.1 Configuration Spring Boot
+--------------------------------------------------------------------------------
+
+Fichiers de configuration (ordre de priorite):
+  1. application.yaml              (Configuration de base)
+  2. application-{profile}.yaml    (Configuration par profil)
+  3. Variables d'environnement
+  4. Arguments de ligne de commande
+
+Exemple application.yaml:
+  server:
+    port: 8080
+    servlet:
+      context-path: /backend/api
+
+  spring:
+    application:
+      name: kockpit-backoffice
+    profiles:
+      include: opensearch
+
+  kockpit:
+    sdk:
+      domain: rcu
+      env: local
+      appId: backend-application
+
+
+Exemple application-local.yaml:
+  kockpit:
+    audit:
+      opensearch:
+        index: kockpit-audit
+        endpoints: http://localhost:9200
+      local:
+        storage-path: /tmp/kockpit-storage
+
+
+--------------------------------------------------------------------------------
+6.2 Profiles Maven
+--------------------------------------------------------------------------------
+
+Profils disponibles dans pom.xml:
+
+  <profiles>
+    <!-- Moteur de recherche -->
+    <profile>
+      <id>opensearch</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <dependencies>
+        <dependency>
+          <artifactId>kockpit-backend-service-search-opensearch</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+
+    <!-- Stockage -->
+    <profile>
+      <id>filesystem</id>
+      <dependencies>
+        <dependency>
+          <artifactId>kockpit-backend-service-storage-filesystem</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+
+    <profile>
+      <id>azure</id>
+      <dependencies>
+        <dependency>
+          <artifactId>kockpit-backend-service-storage-azure</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
+
+
+Activation:
+  mvn clean package -P opensearch,filesystem
+  mvn spring-boot:run -P opensearch,azure
+
+
+--------------------------------------------------------------------------------
+6.3 Variables d'environnement
+--------------------------------------------------------------------------------
+
+Variables supportees:
+
+  OpenSearch:
+    OPENSEARCH_ENDPOINTS     : Liste des endpoints OpenSearch
+    INDEX_NAME               : Nom de l'index
+
+  Azure Storage:
+    STORAGE_ENDPOINT         : Endpoint Azure Blob
+    STORAGE_ACCOUNT          : Nom du compte
+    STORAGE_KEY              : Cle d'acces
+    STORAGE_CONTAINER        : Nom du container
+
+  Securite:
+    KOCKPIT_USERNAME         : Nom d'utilisateur
+    KOCKPIT_PASSWORD         : Mot de passe
+
+Exemple:
+  export OPENSEARCH_ENDPOINTS=http://localhost:9200
+  export INDEX_NAME=kockpit-audit
+  export STORAGE_PATH=/data/kockpit
+
+
+================================================================================
+7. SECURITE
+================================================================================
+
+--------------------------------------------------------------------------------
+7.1 Authentification
+--------------------------------------------------------------------------------
+
+Type: Basic HTTP Authentication
+
+Configuration:
+  - Utilisateur stocke en memoire (InMemoryUserDetailsManager)
+  - Username: user (configurable)
+  - Password: password (configurable)
+  - Encoder: {noop} (pas d'encodage - DEV ONLY!)
+
+Headers requis:
+  Authorization: Basic base64(username:password)
+
+Exemple:
+  # Encoder les credentials
+  echo -n "user:password" | base64
+  # Resultat: dXNlcjpwYXNzd29yZA==
+
+  # Utiliser dans la requete
+  curl -H "Authorization: Basic dXNlcjpwYXNzd29yZA==" \
+       http://localhost:8080/backend/api/rcu/local/audits/_search
+
+
+--------------------------------------------------------------------------------
+7.2 CORS (Cross-Origin Resource Sharing)
+--------------------------------------------------------------------------------
+
+Configuration:
+  - Allowed Origins: * (tous les domaines)
+  - Allowed Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+  - Allowed Headers: * (tous)
+  - Allow Credentials: true
+
+ATTENTION: Cette configuration est permissive et adaptee au developpement.
+En production, il faut restreindre les origins autorises.
+
+
+--------------------------------------------------------------------------------
+7.3 CSRF (Cross-Site Request Forgery)
+--------------------------------------------------------------------------------
+
+Status: DESACTIVE
+
+Raison: API REST stateless sans session
+  - Pas de cookies
+  - Token Bearer dans le header
+  - Pas de risque CSRF
+
+Note: Si vous ajoutez des sessions, reactiver CSRF!
+
+
+--------------------------------------------------------------------------------
+7.4 Sessions
+--------------------------------------------------------------------------------
+
+Mode: STATELESS
+
+Configuration:
+  sessionManagement(config ->
+    config.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+  )
+
+Implications:
+  - Pas de session cote serveur
+  - Authentification a chaque requete
+  - Scalabilite horizontale facilitee
+
+
+--------------------------------------------------------------------------------
+7.5 Recommandations pour la production
+--------------------------------------------------------------------------------
+
+1. AUTHENTIFICATION
+   - Remplacer Basic Auth par JWT ou OAuth2
+   - Utiliser HTTPS uniquement
+   - Externaliser les credentials (vault, Azure Key Vault)
+   - Encoder les mots de passe (BCrypt)
+
+2. AUTORISATION
+   - Implementer des roles (ROLE_USER, ROLE_ADMIN)
+   - Securiser les endpoints par role
+   - Implementer des ACLs fines
+
+3. CORS
+   - Restreindre les origins autorises
+   - Liste blanche des domaines frontend
+
+4. HTTPS
+   - Activer TLS
+   - Certificats valides
+   - Redirect HTTP vers HTTPS
+
+5. MONITORING
+   - Logs des tentatives d'authentification
+   - Alertes sur les echecs multiples
+   - Audit trail
+
+
+================================================================================
+8. DEPLOIEMENT
+================================================================================
+
+--------------------------------------------------------------------------------
+8.1 Environnements
+--------------------------------------------------------------------------------
+
+Environnements cibles:
+  - local       : Developpement local
+  - dev         : Environnement de developpement
+  - staging     : Pre-production
+  - prod        : Production
+
+Configuration par environnement:
+  application-local.yaml     : Dev local (filesystem, OpenSearch local)
+  application-dev.yaml       : Dev (OpenSearch partage)
+  application-staging.yaml   : Staging (Azure)
+  application-prod.yaml      : Production (Azure, redondance)
+
+
+--------------------------------------------------------------------------------
+8.2 Build
+--------------------------------------------------------------------------------
+
+Commandes Maven:
+
+  # Build complet avec tous les tests
+  mvn clean install
+
+  # Build sans tests
+  mvn clean install -DskipTests
+
+  # Build avec profils specifiques
+  mvn clean package -P opensearch,filesystem
+
+  # Build JAR executable
+  mvn clean package spring-boot:repackage
+
+Artefact genere:
+  target/kockpit-backend-application-1.0.0-SNAPSHOT.jar
+
+
+--------------------------------------------------------------------------------
+8.3 Execution
+--------------------------------------------------------------------------------
+
+# Via Maven
+mvn spring-boot:run -Dspring-boot.run.profiles=local,opensearch,filesystem
+
+# Via JAR
+java -jar target/kockpit-backend-application-1.0.0-SNAPSHOT.jar \
+     --spring.profiles.active=local,opensearch,filesystem
+
+# Avec variables d'environnement
+export OPENSEARCH_ENDPOINTS=http://opensearch:9200
+export INDEX_NAME=kockpit-audit
+java -jar target/kockpit-backend-application-1.0.0-SNAPSHOT.jar
+
+
+--------------------------------------------------------------------------------
+8.4 Docker
+--------------------------------------------------------------------------------
+
+Dockerfile recommande:
+
+  FROM eclipse-temurin:17-jre-alpine
+
+  WORKDIR /app
+
+  COPY target/*.jar app.jar
+
+  EXPOSE 8080
+
+  ENTRYPOINT ["java", "-jar", "app.jar"]
+
+Build:
+  docker build -t kockpit-backend:1.0.0 .
+
+Run:
+  docker run -p 8080:8080 \
+    -e OPENSEARCH_ENDPOINTS=http://opensearch:9200 \
+    -e INDEX_NAME=kockpit-audit \
+    kockpit-backend:1.0.0
+
+
+--------------------------------------------------------------------------------
+8.5 Docker Compose
+--------------------------------------------------------------------------------
+
+Exemple docker-compose.yml:
+
+  version: '3.8'
+
+  services:
+    opensearch:
+      image: opensearchproject/opensearch:latest
+      environment:
+        - discovery.type=single-node
+        - DISABLE_SECURITY_PLUGIN=true
+      ports:
+        - "9200:9200"
+
+    kockpit-backend:
+      build: .
+      ports:
+        - "8080:8080"
+      environment:
+        - SPRING_PROFILES_ACTIVE=local,opensearch,filesystem
+        - OPENSEARCH_ENDPOINTS=http://opensearch:9200
+        - INDEX_NAME=kockpit-audit
+        - STORAGE_PATH=/data
+      volumes:
+        - ./data:/data
+      depends_on:
+        - opensearch
+
+Lancement:
+  docker-compose up -d
+
+
+--------------------------------------------------------------------------------
+8.6 Kubernetes
+--------------------------------------------------------------------------------
+
+Ressources recommandees:
+
+  Deployment:
+    - Replicas: 3 (minimum pour HA)
+    - Resource Limits: CPU 1 core, Memory 2Gi
+    - Liveness Probe: /backend/actuator/health/liveness
+    - Readiness Probe: /backend/actuator/health/readiness
+
+  Service:
+    - Type: ClusterIP
+    - Port: 8080
+
+  Ingress:
+    - TLS active
+    - Path: /backend/api/*
+
+  ConfigMap:
+    - Configuration Spring
+
+  Secret:
+    - Credentials OpenSearch
+    - Credentials Azure
+
+
+================================================================================
+9. DEVELOPPEMENT LOCAL
+================================================================================
+
+--------------------------------------------------------------------------------
+9.1 Pre-requis
+--------------------------------------------------------------------------------
+
+Logiciels requis:
+  - Java 17 (OpenJDK ou Amazon Corretto)
+  - Maven 3.8+
+  - Docker & Docker Compose
+  - IntelliJ IDEA (recommande) ou Eclipse
+  - Git
+
+Installation Java (via SDKMAN):
+  curl -s "https://get.sdkman.io" | bash
+  sdk install java 17.0.17-amzn
+
+
+--------------------------------------------------------------------------------
+9.2 Configuration OpenSearch local
+--------------------------------------------------------------------------------
+
+1. Demarrer OpenSearch via Docker Compose
+
+   Fichier: /home/debian/sources/others/opensearch/docker-compose-dev.yml
+
+   services:
+     opensearch-node1:
+       image: opensearchproject/opensearch:latest
+       environment:
+         - discovery.type=single-node
+         - DISABLE_SECURITY_PLUGIN=true
+       ports:
+         - 9200:9200
+
+   Commande:
+     cd /home/debian/sources/others/opensearch
+     docker compose -f docker-compose-dev.yml up -d
+
+2. Verifier le fonctionnement:
+   curl http://localhost:9200
+
+   Reponse attendue:
+   {
+     "name": "opensearch-node1",
+     "cluster_name": "opensearch-cluster-dev",
+     "version": {...}
+   }
+
+3. Dashboard OpenSearch (optionnel):
+   http://localhost:5601
+
+
+--------------------------------------------------------------------------------
+9.3 Configuration de l'application
+--------------------------------------------------------------------------------
+
+1. Creer le repertoire de stockage:
+   mkdir -p /tmp/kockpit-storage
+
+2. Configuration IntelliJ IDEA:
+
+   a. Importer le projet Maven
+      File -> Open -> Selectionner le pom.xml racine
+
+   b. Configurer le SDK:
+      File -> Project Structure -> Project SDK: Java 17
+
+   c. Creer une Run Configuration:
+      Run -> Edit Configurations -> Add New -> Spring Boot
+
+      Configuration:
+        Name: KockpitBackendApplication
+        Main class: org.kockpit.backend.KockpitAuditBackendApplication
+        Active profiles: local,opensearch,filesystem
+
+        VM options (optionnel):
+          -Xms512m -Xmx1024m
+
+        Environment variables (optionnel):
+          OPENSEARCH_ENDPOINTS=http://localhost:9200
+          INDEX_NAME=kockpit-audit
+
+3. Lancer l'application:
+   - Clic droit sur KockpitAuditBackendApplication.java
+   - Run 'KockpitAuditBackendApplication'
+
+   Ou via Maven:
+   mvn spring-boot:run -Dspring-boot.run.profiles=local
+
+
+--------------------------------------------------------------------------------
+9.4 Tests des endpoints
+--------------------------------------------------------------------------------
+
+# Health check
+curl http://localhost:8080/backend/actuator/health
+
+# Recherche d'audits (avec auth)
+curl -u user:password \
+  http://localhost:8080/backend/api/rcu/local/audits/_search
+
+# Recherche avec pagination
+curl -u user:password \
+  "http://localhost:8080/backend/api/rcu/local/audits/_search?start=0&size=10"
+
+# Recuperer un audit specifique
+curl -u user:password \
+  http://localhost:8080/backend/api/rcu/local/audits/123
+
+# Lister les configurations
+curl -u user:password \
+  http://localhost:8080/backend/api/config
+
+# Creer une configuration
+curl -u user:password \
+  -H "Content-Type: application/json" \
+  -X POST \
+  -d '{"key":"test","value":"example"}' \
+  http://localhost:8080/backend/api/config
+
+
+--------------------------------------------------------------------------------
+9.5 Debugging
+--------------------------------------------------------------------------------
+
+Activer les logs de debug:
+
+  application-local.yaml:
+    logging:
+      level:
+        org.kockpit: DEBUG
+        org.springframework.web: DEBUG
+        org.opensearch: DEBUG
+
+IntelliJ Debug:
+  - Placer des breakpoints
+  - Run -> Debug 'KockpitAuditBackendApplication'
+  - Utiliser le debugger pour suivre l'execution
+
+
+--------------------------------------------------------------------------------
+9.6 Hot Reload (Spring DevTools)
+--------------------------------------------------------------------------------
+
+Ajouter dans pom.xml:
+
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-devtools</artifactId>
+    <scope>runtime</scope>
+    <optional>true</optional>
+  </dependency>
+
+Avantage:
+  - Rechargement automatique a chaque modification
+  - LiveReload du navigateur
+  - Plus rapide que de redemarrer l'appli
+
+
+================================================================================
+                           FIN DU DOCUMENT
+================================================================================
+
+Pour plus d'informations:
+  - Documentation Spring Boot: https://spring.io/projects/spring-boot
+  - Documentation OpenSearch: https://opensearch.org/docs/latest/
+  - Kockpit Repository: (a completer)
+
+Auteur: Claude Code
+Date: 2025-12-01
+Version: 1.0.0

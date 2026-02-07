@@ -1,0 +1,356 @@
+================================================================================
+                    KOCKPIT - CHANGELOG DES FIXES DE BUILD
+================================================================================
+
+Date: 2025-12-02
+Version: 1.0.0-SNAPSHOT
+Type: Corrections de build Maven/Lombok
+
+================================================================================
+                              RÉSUMÉ
+================================================================================
+
+Cette mise à jour corrige les problèmes de compilation qui empêchaient le
+projet de se builder correctement. Les erreurs étaient liées à:
+- L'utilisation de Java 25 au lieu de Java 17
+- La configuration manquante de Lombok dans Maven Compiler Plugin
+- Des dépendances Lombok manquantes dans certains modules
+
+
+================================================================================
+                         FICHIERS MODIFIÉS
+================================================================================
+
+1. /kockpit/pom.xml
+   Lignes: 25-43 (nouveau bloc)
+   Type: Ajout configuration
+
+   Ajout de la section <build><pluginManagement> avec configuration
+   du maven-compiler-plugin pour activer l'annotation processing Lombok.
+
+   Raison:
+   - Le Maven Compiler Plugin 3.13.0 nécessite une configuration explicite
+     des annotation processors
+   - Sans cela, les annotations Lombok (@Data, @Builder, etc.) sont ignorées
+
+   Impact:
+   - Tous les modules enfants bénéficient de cette configuration
+   - Lombok génère maintenant correctement les getters/setters/builders
+
+
+2. /kockpit/kockpit-audit/kockpit-audit-api/pom.xml
+   Lignes: 13-17
+   Type: Modification scope dépendance
+
+   Changement du scope de la dépendance lombok de "compile" à "provided".
+
+   Avant:
+   <dependency>
+       <groupId>org.projectlombok</groupId>
+       <artifactId>lombok</artifactId>
+   </dependency>
+
+   Après:
+   <dependency>
+       <groupId>org.projectlombok</groupId>
+       <artifactId>lombok</artifactId>
+       <scope>provided</scope>
+   </dependency>
+
+   Raison:
+   - Lombok n'est nécessaire qu'à la compilation, pas au runtime
+   - Réduit la taille des JARs générés
+   - Bonne pratique Maven
+
+
+3. /kockpit/kockpit-audit/kockpit-audit-httpexchange/pom.xml
+   Lignes: 13-17 (nouveau bloc)
+   Type: Ajout dépendance
+
+   Ajout de la dépendance Lombok manquante.
+
+   Ajouté:
+   <dependency>
+       <groupId>org.projectlombok</groupId>
+       <artifactId>lombok</artifactId>
+       <scope>provided</scope>
+   </dependency>
+
+   Raison:
+   - Le code source utilise @Slf4j, @Data, @Builder
+   - La dépendance n'était pas déclarée dans le pom.xml
+   - Causait des erreurs "package lombok does not exist"
+
+   Impact:
+   - Le module se compile maintenant correctement
+   - Les annotations Lombok sont traitées
+
+
+================================================================================
+                         DOCUMENTATION AJOUTÉE
+================================================================================
+
+1. /kockpit-doc/BUILD-TROUBLESHOOTING.txt (NOUVEAU)
+   Taille: ~18 KB
+
+   Guide complet de résolution des problèmes de build incluant:
+   - Description détaillée des 3 problèmes identifiés
+   - Solutions complètes avec explications techniques
+   - Procédure de build correcte avec Java 17
+   - Checklist de validation
+   - Commandes utiles
+   - FAQ sur Java 17, Lombok, annotationProcessorPaths
+
+
+2. /kockpit-doc/CHANGELOG-BUILD-FIXES.txt (ce fichier)
+
+   Historique des modifications liées aux corrections de build.
+
+
+3. /kockpit-doc/INDEX.txt (MODIFIÉ)
+
+   Mise à jour pour référencer BUILD-TROUBLESHOOTING.txt:
+   - Ajout dans la liste des fichiers disponibles
+   - Ajout dans les parcours recommandés
+   - Ajout dans la recherche par sujet (Troubleshooting, Build)
+   - Mise à jour du changelog
+
+
+================================================================================
+                         PROBLÈMES RÉSOLUS
+================================================================================
+
+PROBLÈME 1: Incompatibilité Version Java
+-----------------------------------------
+Symptômes:
+  - Fatal error compiling: java.lang.ExceptionInInitializerError
+  - com.sun.tools.javac.code.TypeTag :: UNKNOWN
+
+Cause:
+  - Java 25 utilisé alors que le projet requiert Java 17
+  - Lombok 1.18.36 incompatible avec Java 25
+
+Solution appliquée:
+  - Utilisation de Java 17 via JAVA_HOME
+  - Documentation de la procédure correcte
+
+Commande:
+  JAVA_HOME=/path/to/java-17 mvn clean install -DskipTests
+
+Résultat:
+  ✓ Compilation réussie avec Java 17
+  ✓ Lombok fonctionne correctement
+
+
+PROBLÈME 2: Lombok Non Configuré pour Maven Compiler
+-----------------------------------------------------
+Symptômes:
+  - org.kockpit.audit.api.AbstractAuditEvent is not abstract and
+    does not override abstract method getEndTime()
+  - Les méthodes générées par @Data ne sont pas reconnues
+
+Cause:
+  - Maven Compiler Plugin 3.13.0 ne traite pas Lombok sans configuration
+  - annotationProcessorPaths manquant
+
+Solution appliquée:
+  - Ajout de la configuration dans kockpit/pom.xml
+  - Configuration propagée à tous les modules via pluginManagement
+
+Résultat:
+  ✓ Lombok génère correctement les méthodes
+  ✓ Les annotations @Data, @Builder, etc. fonctionnent
+  ✓ AbstractAuditEvent compile sans erreur
+
+
+PROBLÈME 3: Dépendances Lombok Manquantes
+------------------------------------------
+Symptômes:
+  - package lombok does not exist
+  - cannot find symbol: class Slf4j, Data, Builder
+
+Module concerné:
+  - kockpit-audit-httpexchange
+
+Cause:
+  - Le code utilise des annotations Lombok
+  - La dépendance n'était pas déclarée dans le pom.xml
+
+Solution appliquée:
+  - Ajout de la dépendance avec scope=provided
+
+Résultat:
+  ✓ Le module compile correctement
+  ✓ Toutes les classes utilisant Lombok fonctionnent
+
+
+================================================================================
+                         VALIDATION
+================================================================================
+
+Commande de validation:
+  JAVA_HOME=/path/to/java-17 mvn clean install -DskipTests
+
+Résultat attendu:
+  [INFO] BUILD SUCCESS
+  [INFO] Total time: ~15-20 secondes
+
+Modules compilés avec succès (57 modules):
+  ✓ kockpit
+  ✓ kockpit-audit (et tous ses sous-modules)
+  ✓ kockpit-rules (et tous ses sous-modules)
+  ✓ kockpit-backends (et tous ses sous-modules)
+
+Artefacts générés:
+  ✓ kockpit-backend-application-1.0.0-SNAPSHOT.jar
+  ✓ Tous les modules installés dans ~/.m2/repository/org/kockpit/
+
+
+================================================================================
+                         IMPACT
+================================================================================
+
+Build:
+  ✓ Le projet se compile maintenant sans erreur
+  ✓ Temps de build: ~15-20 secondes (sans tests)
+  ✓ Compatible avec tous les environnements ayant Java 17
+
+Développement:
+  ✓ Les développeurs peuvent maintenant builder le projet
+  ✓ Lombok fonctionne dans tous les modules
+  ✓ Support complet des annotations @Data, @Builder, @Slf4j, etc.
+
+CI/CD:
+  ✓ Les pipelines peuvent utiliser Java 17
+  ✓ Build reproductible et stable
+  ✓ Configuration documentée
+
+Documentation:
+  ✓ Guide complet pour résoudre les problèmes de build
+  ✓ Procédure claire pour les nouveaux développeurs
+  ✓ FAQ technique disponible
+
+
+================================================================================
+                         COMPATIBILITÉ
+================================================================================
+
+Versions testées et validées:
+
+Java:
+  ✓ Java 17.0.16 (Amazon Corretto)
+  ✓ Java 17.0.17 (Amazon Corretto)
+  ✗ Java 25 (incompatible avec Lombok 1.18.36)
+
+Maven:
+  ✓ Maven 3.9.10
+  ✓ Maven 3.8+ (recommandé)
+
+Lombok:
+  ✓ Lombok 1.18.36 (défini par Spring Boot 3.4.3)
+
+Spring Boot:
+  ✓ Spring Boot 3.4.3 (parent POM)
+
+Systèmes d'exploitation:
+  ✓ Linux (testé sur Debian)
+  ✓ macOS (devrait fonctionner)
+  ✓ Windows (devrait fonctionner)
+
+
+================================================================================
+                         NOTES TECHNIQUES
+================================================================================
+
+Pourquoi Java 17?
+-----------------
+- Défini dans pom.xml: <maven.compiler.release>17</maven.compiler.release>
+- Spring Boot 3.4.3 nécessite minimum Java 17
+- Lombok 1.18.36 est testé et compatible avec Java 17
+- Version LTS stable et largement utilisée
+
+Pourquoi annotationProcessorPaths?
+-----------------------------------
+- Maven Compiler Plugin 3.13.0 nécessite une configuration explicite
+- Les annotation processors (comme Lombok) doivent être déclarés
+- Sans cela, les annotations sont ignorées silencieusement
+- Permet de séparer les dépendances de compilation des dépendances runtime
+
+Pourquoi scope=provided pour Lombok?
+-------------------------------------
+- Lombok transforme le bytecode à la compilation
+- Les classes générées n'ont pas besoin de Lombok au runtime
+- Réduit la taille des JARs finaux
+- Évite les dépendances inutiles dans le classpath
+
+
+================================================================================
+                         PROCHAINES ÉTAPES
+================================================================================
+
+Pour les développeurs:
+  1. Lire BUILD-TROUBLESHOOTING.txt
+  2. Vérifier que Java 17 est installé
+  3. Builder le projet avec la commande correcte
+  4. Suivre QUICK-START.txt pour démarrer l'application
+
+Pour les ops:
+  1. Mettre à jour les scripts CI/CD pour utiliser Java 17
+  2. Vérifier les images Docker (doivent inclure Java 17)
+  3. Mettre à jour la documentation d'installation
+
+Pour les contributeurs:
+  1. Toujours utiliser Java 17 pour le développement
+  2. Déclarer Lombok avec scope=provided dans les nouveaux modules
+  3. Tester le build avant de créer une PR
+
+
+================================================================================
+                         CONTACTS
+================================================================================
+
+Pour toute question sur ces modifications:
+  - Consulter BUILD-TROUBLESHOOTING.txt
+  - Ouvrir une issue sur le repository
+  - Contacter l'équipe de développement
+
+
+================================================================================
+                         CHECKLIST POST-INSTALLATION
+================================================================================
+
+Après avoir appliqué ces corrections, vérifier:
+
+[ ] Java 17 est installé et configuré
+[ ] mvn -version affiche Java version 17.0.x
+[ ] Le fichier kockpit/pom.xml contient la configuration annotationProcessorPaths
+[ ] Le fichier kockpit-audit-httpexchange/pom.xml déclare la dépendance lombok
+[ ] mvn clean install -DskipTests réussit sans erreur
+[ ] Le JAR backend est généré dans target/
+[ ] Les modules sont installés dans ~/.m2/repository/org/kockpit/
+[ ] La documentation BUILD-TROUBLESHOOTING.txt est accessible
+
+
+================================================================================
+                         RÉFÉRENCES
+================================================================================
+
+Documentation:
+  - BUILD-TROUBLESHOOTING.txt : Guide complet de résolution
+  - INDEX.txt : Navigation dans la documentation
+  - QUICK-START.txt : Démarrage après build réussi
+
+Commits:
+  (À compléter lors du commit Git)
+
+Issues:
+  (À compléter si applicable)
+
+
+================================================================================
+
+Fin du changelog des corrections de build.
+
+Pour plus d'informations, consulter BUILD-TROUBLESHOOTING.txt
+
+================================================================================

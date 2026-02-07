@@ -1,0 +1,975 @@
+================================================================================
+                    KOCKPIT DEMO APPLICATION - GUIDE COMPLET
+================================================================================
+
+Date de creation: 2025-12-02
+Version: 1.0.0
+Application: kockpit-demo-app
+
+Ce document explique comment creer et utiliser une application demo Spring Boot
+qui integre le kockpit-audit-sdk pour auditer automatiquement les actions.
+
+
+================================================================================
+                            TABLE DES MATIERES
+================================================================================
+
+1. Vue d'ensemble
+2. Architecture de l'application demo
+3. Structure du projet
+4. Configuration
+5. Cas d'usage implementes
+6. Endpoints REST
+7. Demarrage rapide
+8. Tests et validation
+9. Personnalisation
+10. Troubleshooting
+
+
+================================================================================
+                            1. VUE D'ENSEMBLE
+================================================================================
+
+### Objectif
+
+Creer une application Spring Boot simple qui demontre l'utilisation de
+kockpit-audit-sdk pour auditer automatiquement les actions utilisateur.
+
+### Fonctionnalites
+
+- API REST pour gerer des produits (CRUD)
+- Audit automatique de toutes les operations via @Audited
+- Integration avec kockpit-backend pour stockage des audits
+- Configuration multi-environnement (local, dev, prod)
+- Exemples d'annotations d'audit personnalisees
+
+### Technologies
+
+- Spring Boot 3.4.3
+- kockpit-audit-sdk 1.0.0-SNAPSHOT
+- kockpit-audit-annotation 1.0.0-SNAPSHOT
+- Java 17+
+- Maven 3.9+
+- Lombok
+
+
+================================================================================
+                    2. ARCHITECTURE DE L'APPLICATION DEMO
+================================================================================
+
+### Composants principaux
+
+┌─────────────────────────────────────────────────────────────────┐
+│                        CLIENT (curl, Postman)                    │
+└─────────────────────────────────────────────────────────────────┘
+                                  │
+                                  │ HTTP REST
+                                  v
+┌─────────────────────────────────────────────────────────────────┐
+│                    DEMO APPLICATION (Spring Boot)                │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │              REST Controllers (@RestController)          │   │
+│  │  - ProductController                                     │   │
+│  │  - OrderController                                       │   │
+│  │                                                           │   │
+│  │  Annotations: @Audited, @AuditedParam                    │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                              │                                   │
+│                              v                                   │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │              Service Layer (@Service)                    │   │
+│  │  - ProductService                                        │   │
+│  │  - OrderService                                          │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                              │                                   │
+│                              v                                   │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │         Kockpit Audit SDK (Auto-configuration)           │   │
+│  │  - AuditInterceptor                                      │   │
+│  │  - AuditEventPublisher                                   │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                                  │
+                                  │ HTTP POST /audits
+                                  v
+┌─────────────────────────────────────────────────────────────────┐
+│              KOCKPIT BACKEND (kockpit-backend-application)       │
+│                                                                   │
+│  - Stockage audits (filesystem/azure)                            │
+│  - Indexation OpenSearch                                         │
+│  - APIs de recherche                                             │
+└─────────────────────────────────────────────────────────────────┘
+
+
+### Flux d'audit typique
+
+1. Client appelle POST /api/products avec payload JSON
+2. ProductController.createProduct() intercepte la requete
+3. Annotation @Audited declenche l'AuditInterceptor
+4. AuditInterceptor construit un AuditEvent avec:
+   - Domain (demo)
+   - Environment (local)
+   - AppId (demo-app)
+   - Action (CREATE_PRODUCT)
+   - User (extraite de SecurityContext ou headers)
+   - Timestamp
+   - Payload (parametres de la methode)
+5. AuditEventPublisher envoie l'event vers kockpit-backend
+6. Kockpit-backend stocke et indexe l'audit
+7. Reponse retournee au client
+
+
+================================================================================
+                        3. STRUCTURE DU PROJET
+================================================================================
+
+kockpit-demo-app/
+├── pom.xml                                 # Maven configuration
+├── README.md                               # Quick start guide
+├── .gitignore
+│
+├── src/
+│   ├── main/
+│   │   ├── java/
+│   │   │   └── com/
+│   │   │       └── kockpit/
+│   │   │           └── demo/
+│   │   │               │
+│   │   │               ├── DemoApplication.java
+│   │   │               │   # Main Spring Boot application
+│   │   │               │   # @SpringBootApplication
+│   │   │               │   # @EnableAuditing (kockpit)
+│   │   │               │
+│   │   │               ├── config/
+│   │   │               │   ├── SecurityConfig.java
+│   │   │               │   │   # Basic security config
+│   │   │               │   │   # Pour extraire username
+│   │   │               │   │
+│   │   │               │   └── AuditConfig.java
+│   │   │               │       # Configuration audit
+│   │   │               │       # Personnalisation si necessaire
+│   │   │               │
+│   │   │               ├── controller/
+│   │   │               │   ├── ProductController.java
+│   │   │               │   │   # CRUD products
+│   │   │               │   │   # @Audited sur chaque methode
+│   │   │               │   │
+│   │   │               │   └── OrderController.java
+│   │   │               │       # CRUD orders
+│   │   │               │       # Demonstration audit complexe
+│   │   │               │
+│   │   │               ├── service/
+│   │   │               │   ├── ProductService.java
+│   │   │               │   │   # Business logic products
+│   │   │               │   │
+│   │   │               │   └── OrderService.java
+│   │   │               │       # Business logic orders
+│   │   │               │
+│   │   │               ├── model/
+│   │   │               │   ├── Product.java
+│   │   │               │   │   # DTO Product
+│   │   │               │   │   # @Data (Lombok)
+│   │   │               │   │
+│   │   │               │   ├── Order.java
+│   │   │               │   │   # DTO Order
+│   │   │               │   │
+│   │   │               │   └── ApiResponse.java
+│   │   │               │       # Response wrapper
+│   │   │               │
+│   │   │               └── repository/
+│   │   │                   # In-memory storage pour la demo
+│   │   │                   # (pas de vraie DB)
+│   │   │
+│   │   └── resources/
+│   │       ├── application.yaml
+│   │       │   # Config de base
+│   │       │
+│   │       ├── application-local.yaml
+│   │       │   # Config developpement local
+│   │       │
+│   │       ├── application-dev.yaml
+│   │       │   # Config environnement dev
+│   │       │
+│   │       └── logback-spring.xml
+│   │           # Configuration logs
+│   │
+│   └── test/
+│       └── java/
+│           └── com/kockpit/demo/
+│               ├── DemoApplicationTests.java
+│               ├── ProductControllerTests.java
+│               └── AuditIntegrationTests.java
+│
+└── docker/
+    └── docker-compose.yml
+        # Pour demarrer l'app + kockpit-backend + opensearch
+
+
+================================================================================
+                            4. CONFIGURATION
+================================================================================
+
+### 4.1 Maven POM (pom.xml)
+
+Dependances principales:
+
+<parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.4.3</version>
+</parent>
+
+<dependencies>
+    <!-- Spring Boot Web -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <!-- Kockpit Audit SDK -->
+    <dependency>
+        <groupId>org.kockpit</groupId>
+        <artifactId>kockpit-audit-sdk</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </dependency>
+
+    <!-- Kockpit Audit Annotations -->
+    <dependency>
+        <groupId>org.kockpit</groupId>
+        <artifactId>kockpit-audit-annotation</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </dependency>
+
+    <!-- Lombok -->
+    <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <optional>true</optional>
+    </dependency>
+
+    <!-- Spring Boot Test -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
+
+
+### 4.2 Application Configuration (application.yaml)
+
+server:
+  port: 8090
+  servlet:
+    context-path: /demo/api
+
+spring:
+  application:
+    name: kockpit-demo-app
+
+# Configuration Kockpit SDK
+kockpit:
+  sdk:
+    domain: demo                    # Domain de l'application
+    env: ${ENVIRONMENT:local}       # Environnement (local, dev, prod)
+    appId: demo-app                 # Identifiant application
+    enabled: true                   # Activer l'audit
+
+  audit:
+    backend:
+      url: http://localhost:8080/backend/api    # URL kockpit-backend
+      username: user                             # Basic auth
+      password: password
+      timeout: 5000                              # Timeout 5s
+
+logging:
+  level:
+    com.kockpit.demo: DEBUG
+    org.kockpit: DEBUG
+
+
+### 4.3 Configuration locale (application-local.yaml)
+
+kockpit:
+  sdk:
+    env: local
+  audit:
+    backend:
+      url: http://localhost:8080/backend/api
+
+
+### 4.4 Configuration dev (application-dev.yaml)
+
+kockpit:
+  sdk:
+    env: dev
+  audit:
+    backend:
+      url: https://kockpit-backend-dev.azure.com/backend/api
+
+
+================================================================================
+                        5. CAS D'USAGE IMPLEMENTES
+================================================================================
+
+### 5.1 Gestion de Produits (Products)
+
+Operations auditees:
+- CREATE_PRODUCT : Creer un nouveau produit
+- UPDATE_PRODUCT : Modifier un produit existant
+- DELETE_PRODUCT : Supprimer un produit
+- GET_PRODUCT    : Consulter un produit
+- LIST_PRODUCTS  : Lister tous les produits
+
+Donnees auditees:
+- ID du produit
+- Nom du produit
+- Prix
+- Quantite en stock
+- Utilisateur qui effectue l'action
+- Timestamp
+
+
+### 5.2 Gestion de Commandes (Orders)
+
+Operations auditees:
+- CREATE_ORDER   : Creer une nouvelle commande
+- UPDATE_ORDER   : Modifier une commande
+- CANCEL_ORDER   : Annuler une commande
+- SHIP_ORDER     : Expedier une commande
+- DELIVER_ORDER  : Livrer une commande
+
+Donnees auditees:
+- ID de la commande
+- ID du client
+- Liste des produits commandes
+- Montant total
+- Statut de la commande
+- Changements de statut
+- Utilisateur
+- Timestamp
+
+
+### 5.3 Scenarios de demonstration
+
+Scenario 1: Cycle de vie d'un produit
+--------------------------------------
+1. POST /api/products (creation)         → Audit CREATE_PRODUCT
+2. GET /api/products/{id} (consultation) → Audit GET_PRODUCT
+3. PUT /api/products/{id} (modification) → Audit UPDATE_PRODUCT
+4. DELETE /api/products/{id} (suppression) → Audit DELETE_PRODUCT
+
+Resultat: 4 audits dans kockpit-backend
+
+
+Scenario 2: Traitement d'une commande
+--------------------------------------
+1. POST /api/orders (creation)           → Audit CREATE_ORDER
+2. POST /api/orders/{id}/ship (expedier) → Audit SHIP_ORDER
+3. POST /api/orders/{id}/deliver (livrer) → Audit DELIVER_ORDER
+
+Resultat: 3 audits dans kockpit-backend
+
+
+Scenario 3: Annulation de commande
+-----------------------------------
+1. POST /api/orders (creation)           → Audit CREATE_ORDER
+2. POST /api/orders/{id}/cancel (annuler) → Audit CANCEL_ORDER
+
+Resultat: 2 audits avec raison d'annulation
+
+
+================================================================================
+                            6. ENDPOINTS REST
+================================================================================
+
+Base URL: http://localhost:8090/demo/api
+
+
+### 6.1 Products API
+
+----------------------------------------------------------------------------
+GET /api/products
+----------------------------------------------------------------------------
+Description: Liste tous les produits
+Audit: LIST_PRODUCTS
+
+Reponse 200 OK:
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid-1",
+      "name": "Laptop",
+      "price": 999.99,
+      "stock": 10,
+      "createdAt": "2025-12-02T10:00:00Z"
+    }
+  ]
+}
+
+
+----------------------------------------------------------------------------
+GET /api/products/{id}
+----------------------------------------------------------------------------
+Description: Recupere un produit par ID
+Audit: GET_PRODUCT
+Parametres audites: productId
+
+Reponse 200 OK:
+{
+  "success": true,
+  "data": {
+    "id": "uuid-1",
+    "name": "Laptop",
+    "price": 999.99,
+    "stock": 10
+  }
+}
+
+
+----------------------------------------------------------------------------
+POST /api/products
+----------------------------------------------------------------------------
+Description: Cree un nouveau produit
+Audit: CREATE_PRODUCT
+Parametres audites: product (nom, prix, stock)
+
+Request Body:
+{
+  "name": "Laptop",
+  "price": 999.99,
+  "stock": 10
+}
+
+Reponse 201 Created:
+{
+  "success": true,
+  "data": {
+    "id": "uuid-1",
+    "name": "Laptop",
+    "price": 999.99,
+    "stock": 10,
+    "createdAt": "2025-12-02T10:00:00Z"
+  }
+}
+
+
+----------------------------------------------------------------------------
+PUT /api/products/{id}
+----------------------------------------------------------------------------
+Description: Modifie un produit existant
+Audit: UPDATE_PRODUCT
+Parametres audites: productId, product (changements)
+
+Request Body:
+{
+  "name": "Laptop Pro",
+  "price": 1299.99,
+  "stock": 5
+}
+
+Reponse 200 OK:
+{
+  "success": true,
+  "data": {
+    "id": "uuid-1",
+    "name": "Laptop Pro",
+    "price": 1299.99,
+    "stock": 5,
+    "updatedAt": "2025-12-02T10:05:00Z"
+  }
+}
+
+
+----------------------------------------------------------------------------
+DELETE /api/products/{id}
+----------------------------------------------------------------------------
+Description: Supprime un produit
+Audit: DELETE_PRODUCT
+Parametres audites: productId
+
+Reponse 200 OK:
+{
+  "success": true,
+  "message": "Product deleted successfully"
+}
+
+
+### 6.2 Orders API
+
+----------------------------------------------------------------------------
+POST /api/orders
+----------------------------------------------------------------------------
+Description: Cree une nouvelle commande
+Audit: CREATE_ORDER
+Parametres audites: order (customerId, items, total)
+
+Request Body:
+{
+  "customerId": "customer-123",
+  "items": [
+    {
+      "productId": "uuid-1",
+      "quantity": 2,
+      "price": 999.99
+    }
+  ],
+  "total": 1999.98
+}
+
+Reponse 201 Created:
+{
+  "success": true,
+  "data": {
+    "id": "order-uuid-1",
+    "customerId": "customer-123",
+    "status": "CREATED",
+    "total": 1999.98,
+    "createdAt": "2025-12-02T10:00:00Z"
+  }
+}
+
+
+----------------------------------------------------------------------------
+POST /api/orders/{id}/cancel
+----------------------------------------------------------------------------
+Description: Annule une commande
+Audit: CANCEL_ORDER
+Parametres audites: orderId, reason
+
+Request Body:
+{
+  "reason": "Customer changed mind"
+}
+
+Reponse 200 OK:
+{
+  "success": true,
+  "data": {
+    "id": "order-uuid-1",
+    "status": "CANCELLED",
+    "cancelledAt": "2025-12-02T10:05:00Z"
+  }
+}
+
+
+----------------------------------------------------------------------------
+POST /api/orders/{id}/ship
+----------------------------------------------------------------------------
+Description: Expedie une commande
+Audit: SHIP_ORDER
+Parametres audites: orderId, trackingNumber
+
+Request Body:
+{
+  "trackingNumber": "TRACK-123456"
+}
+
+Reponse 200 OK:
+{
+  "success": true,
+  "data": {
+    "id": "order-uuid-1",
+    "status": "SHIPPED",
+    "trackingNumber": "TRACK-123456",
+    "shippedAt": "2025-12-02T10:10:00Z"
+  }
+}
+
+
+----------------------------------------------------------------------------
+POST /api/orders/{id}/deliver
+----------------------------------------------------------------------------
+Description: Marque une commande comme livree
+Audit: DELIVER_ORDER
+Parametres audites: orderId
+
+Reponse 200 OK:
+{
+  "success": true,
+  "data": {
+    "id": "order-uuid-1",
+    "status": "DELIVERED",
+    "deliveredAt": "2025-12-02T10:15:00Z"
+  }
+}
+
+
+================================================================================
+                            7. DEMARRAGE RAPIDE
+================================================================================
+
+### Pre-requis
+
+1. Java 17+
+2. Maven 3.9+
+3. Kockpit backend running (voir QUICK-START.txt)
+4. OpenSearch running (voir QUICK-START.txt)
+
+
+### Etape 1: Build du projet kockpit
+
+cd /home/debian/sources/kiss/kockpit
+mvn clean install -DskipTests
+
+
+### Etape 2: Demarrer kockpit-backend
+
+cd /home/debian/sources/kiss/kockpit/kockpit-backends/kockpit-backend-application
+
+# Via IntelliJ
+Run Configuration avec profils: local,opensearch,filesystem
+
+# Ou via Maven
+mvn spring-boot:run -Dspring-boot.run.profiles=local,opensearch,filesystem
+
+Verification: curl http://localhost:8080/backend/api/config
+
+
+### Etape 3: Demarrer l'application demo
+
+cd /home/debian/sources/kiss/kockpit-demo-app
+
+# Via IntelliJ
+Run Configuration avec profil: local
+
+# Ou via Maven
+mvn spring-boot:run -Dspring-boot.run.profiles=local
+
+Verification: curl http://localhost:8090/demo/api/products
+
+
+### Etape 4: Tester les endpoints
+
+# Creer un produit
+curl -X POST http://localhost:8090/demo/api/products \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Laptop",
+    "price": 999.99,
+    "stock": 10
+  }'
+
+# Lister les produits
+curl http://localhost:8090/demo/api/products
+
+# Verifier l'audit dans kockpit-backend
+curl -u user:password \
+  "http://localhost:8080/backend/api/demo/local/audits/_search?start=0&size=10"
+
+
+### Etape 5: Observer les audits
+
+# Via API
+curl -u user:password \
+  "http://localhost:8080/backend/api/demo/local/audits/_search" | jq
+
+# Via OpenSearch Dashboards
+http://localhost:5601
+
+Index: kockpit-audit
+Filter: domain="demo" AND env="local"
+
+
+================================================================================
+                        8. TESTS ET VALIDATION
+================================================================================
+
+### 8.1 Test du cycle complet
+
+Script de test automatise:
+
+#!/bin/bash
+BASE_URL="http://localhost:8090/demo/api"
+BACKEND_URL="http://localhost:8080/backend/api"
+
+echo "1. Creation d'un produit..."
+PRODUCT_ID=$(curl -s -X POST $BASE_URL/products \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Laptop","price":999.99,"stock":10}' | jq -r '.data.id')
+
+echo "Product ID: $PRODUCT_ID"
+
+echo "2. Consultation du produit..."
+curl -s $BASE_URL/products/$PRODUCT_ID | jq
+
+echo "3. Modification du produit..."
+curl -s -X PUT $BASE_URL/products/$PRODUCT_ID \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Laptop Pro","price":1299.99,"stock":5}' | jq
+
+echo "4. Verification des audits..."
+curl -s -u user:password \
+  "$BACKEND_URL/demo/local/audits/_search?start=0&size=10" | jq
+
+echo "5. Suppression du produit..."
+curl -s -X DELETE $BASE_URL/products/$PRODUCT_ID | jq
+
+echo "6. Verification finale des audits..."
+curl -s -u user:password \
+  "$BACKEND_URL/demo/local/audits/_search?start=0&size=10" | jq '.total_count'
+
+echo "Test termine! Nombre d'audits attendus: 4"
+
+
+### 8.2 Validation des audits
+
+Pour chaque action, verifier:
+
+✓ Audit cree dans kockpit-backend
+✓ Domain = "demo"
+✓ Env = "local"
+✓ AppId = "demo-app"
+✓ Action correspond a l'operation (CREATE_PRODUCT, etc.)
+✓ Payload contient les donnees pertinentes
+✓ Timestamp correct
+✓ User extrait correctement (si disponible)
+
+
+### 8.3 Tests unitaires
+
+cd /home/debian/sources/kiss/kockpit-demo-app
+mvn test
+
+
+### 8.4 Tests d'integration
+
+mvn verify -Pintegration-tests
+
+
+================================================================================
+                            9. PERSONNALISATION
+================================================================================
+
+### 9.1 Ajouter un nouveau cas d'usage
+
+1. Creer le modele (DTO)
+2. Creer le controller avec @RestController
+3. Annoter les methodes avec @Audited
+4. Implementer la logique metier
+5. Tester
+
+
+Exemple: Gestion d'utilisateurs
+
+@RestController
+@RequestMapping("/api/users")
+@Slf4j
+public class UserController {
+
+    @PostMapping
+    @Audited(action = "CREATE_USER")
+    public ApiResponse<User> createUser(@RequestBody User user) {
+        // Implementation
+    }
+
+    @DeleteMapping("/{id}")
+    @Audited(action = "DELETE_USER")
+    public ApiResponse<Void> deleteUser(@PathVariable String id) {
+        // Implementation
+    }
+}
+
+
+### 9.2 Personnaliser les audits
+
+Utiliser @AuditedParam pour specifier les champs a auditer:
+
+@PutMapping("/{id}")
+@Audited(action = "UPDATE_PRODUCT")
+public ApiResponse<Product> updateProduct(
+    @PathVariable @AuditedParam("productId") String id,
+    @RequestBody @AuditedParam("changes") Product product) {
+    // Implementation
+}
+
+
+### 9.3 Audit conditionnel
+
+@PostMapping("/{id}/approve")
+@Audited(
+    action = "APPROVE_ORDER",
+    condition = "#order.total > 1000"  // Auditer seulement si > 1000
+)
+public ApiResponse<Order> approveOrder(@PathVariable String id) {
+    // Implementation
+}
+
+
+### 9.4 Contexte personnalise
+
+Ajouter des informations supplementaires dans les audits:
+
+@Component
+public class CustomAuditContextProvider {
+
+    @Bean
+    public AuditContextProvider auditContextProvider() {
+        return () -> {
+            Map<String, Object> context = new HashMap<>();
+            context.put("clientIp", getCurrentClientIp());
+            context.put("userAgent", getCurrentUserAgent());
+            context.put("sessionId", getCurrentSessionId());
+            return context;
+        };
+    }
+}
+
+
+================================================================================
+                            10. TROUBLESHOOTING
+================================================================================
+
+### Probleme: Audits non envoyes
+
+Symptome: L'application demarre mais aucun audit n'apparait dans kockpit-backend
+
+Solutions:
+1. Verifier que kockpit-backend est accessible
+   curl -u user:password http://localhost:8080/backend/api/config
+
+2. Verifier la configuration kockpit.audit.backend.url
+   cat src/main/resources/application.yaml
+
+3. Activer les logs debug
+   logging.level.org.kockpit: DEBUG
+
+4. Verifier que @EnableAuditing est present dans DemoApplication.java
+
+
+### Probleme: Erreur 401 lors de l'envoi des audits
+
+Symptome: Logs contiennent "401 Unauthorized" vers kockpit-backend
+
+Solutions:
+1. Verifier username/password dans application.yaml
+2. Verifier que kockpit-backend a l'authentification activee
+3. Tester manuellement: curl -u user:password http://localhost:8080/backend/api/config
+
+
+### Probleme: Application ne demarre pas
+
+Symptome: Erreur au demarrage concernant les dependances
+
+Solutions:
+1. Builder kockpit d'abord
+   cd /home/debian/sources/kiss/kockpit
+   mvn clean install -DskipTests
+
+2. Verifier les dependances
+   cd /home/debian/sources/kiss/kockpit-demo-app
+   mvn dependency:tree
+
+3. Verifier la version Java
+   java -version  # Doit etre 17+
+
+
+### Probleme: Audits vides ou incomplets
+
+Symptome: Les audits sont crees mais manquent de donnees
+
+Solutions:
+1. Verifier les annotations @AuditedParam sur les parametres
+2. Verifier que les objets sont serialisables (pas de references circulaires)
+3. Ajouter @JsonIgnore sur les champs problematiques
+
+
+### Probleme: Performance degradee
+
+Symptome: L'application est lente
+
+Solutions:
+1. Audit asynchrone par defaut (verifier la config)
+2. Augmenter le timeout: kockpit.audit.backend.timeout
+3. Verifier que kockpit-backend repond rapidement
+4. Considerer un circuit breaker (Resilience4j)
+
+
+================================================================================
+                            ANNEXE: EXEMPLES AVANCES
+================================================================================
+
+### A.1 Audit avec enrichissement
+
+@PostMapping
+@Audited(action = "CREATE_ORDER")
+public ApiResponse<Order> createOrder(
+    @RequestBody Order order,
+    @RequestHeader("X-Customer-Tier") String customerTier) {
+
+    // Le SDK audite automatiquement:
+    // - order (payload)
+    // - customerTier (header)
+    // - timestamp
+    // - user
+
+    return ApiResponse.success(orderService.create(order));
+}
+
+
+### A.2 Audit avec correlation ID
+
+@PostMapping
+@Audited(action = "PROCESS_PAYMENT")
+public ApiResponse<Payment> processPayment(
+    @RequestBody Payment payment,
+    @RequestHeader("X-Correlation-ID") String correlationId) {
+
+    // CorrelationId automatiquement inclus dans l'audit
+    return ApiResponse.success(paymentService.process(payment));
+}
+
+
+### A.3 Recherche d'audits specifiques
+
+# Rechercher tous les audits de creation de produit
+curl -u user:password \
+  -X POST "http://localhost:8080/backend/api/demo/local/audits/_search" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filters": {
+      "action": "CREATE_PRODUCT"
+    },
+    "start": 0,
+    "size": 20
+  }'
+
+# Rechercher les audits d'un utilisateur specifique
+curl -u user:password \
+  -X POST "http://localhost:8080/backend/api/demo/local/audits/_search" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filters": {
+      "user": "john.doe@example.com"
+    },
+    "start": 0,
+    "size": 50
+  }'
+
+
+================================================================================
+                            RESSOURCES
+================================================================================
+
+Documentation principale:
+- README.txt              : Vue d'ensemble Kockpit
+- ARCHITECTURE.txt        : Architecture detaillee
+- API-REFERENCE.txt       : Reference APIs kockpit-backend
+- QUICK-START.txt         : Demarrage rapide kockpit
+
+Code source:
+- /home/debian/sources/kiss/kockpit/
+- /home/debian/sources/kiss/kockpit-demo-app/
+
+Support:
+- Issues GitHub: (a completer)
+- Documentation Spring Boot: https://spring.io/projects/spring-boot
+
+
+================================================================================
+
+Fin du guide. Bonne demonstration !
+
+================================================================================

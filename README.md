@@ -45,45 +45,68 @@ This monorepo contains a complete audit trail management system based on the Koc
 
 ## 🏗️ Architecture
 
+**Current Mode: Kafka Streaming (Asynchronous)**
+
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│                     Client Applications                         │
-│              (kockpit-demo-app on port 8091)                   │
+│                   kockpit-demo-app                              │
+│                   Port: 8091                                    │
+│                   (@Audited annotations)                        │
 └────────────────────────────────────────────────────────────────┘
                             │
-                ┌───────────┴──────────┐
-                │                      │
-        HTTP Direct Mode         Kafka Streaming Mode
-                │                      │
-                ▼                      ▼
-┌───────────────────────────┐   ┌─────────────────┐
-│ kockpit-backend-          │   │     KAFKA       │
-│ application               │   │  localhost:9092 │
-│ Port: 8080                │   │   (optional)    │
-│                           │   └─────────────────┘
-│ • Audit Storage (POST)    │            │
-│ • Audit Search (GET)      │            ▼
-│ • Dashboard Analytics     │   [kockpit-audit-stream]
-└───────────────────────────┘     (not in this repo)
-         │                                │
-         └────────────┬───────────────────┘
-                      ▼
-         ┌────────────────────────┐
-         │      OPENSEARCH        │
-         │    localhost:9200      │
-         │                        │
-         │ Multi-tenant indexes:  │
-         │ {domain}-audit-data-   │
-         │    {env}-ttl{X}d       │
-         └────────────────────────┘
-                      │
-                      ▼
-         ┌────────────────────────┐
-         │  OpenSearch Dashboards │
-         │    localhost:5601      │
-         │  (Kibana-like UI)      │
-         └────────────────────────┘
+                            │ Spring AOP intercepts
+                            │ Kafka Producer sends audit events
+                            ▼
+                  ┌─────────────────┐
+                  │     KAFKA       │
+                  │  localhost:9092 │
+                  │                 │
+                  │  Topic: "audit" │
+                  └─────────────────┘
+                            │
+                            │ Kafka Consumer reads batches
+                            ▼
+              ┌──────────────────────────────┐
+              │ kockpit-audit-stream         │
+              │ (Kafka Stream Consumer)      │
+              │ Port: 9080                   │
+              │                              │
+              │ • Consumes from Kafka        │
+              │ • Batches (max 50 messages)  │
+              │ • Indexes every 5 seconds    │
+              └──────────────────────────────┘
+                            │
+                            │ Bulk indexing
+                            ▼
+              ┌────────────────────────┐
+              │      OPENSEARCH        │
+              │    localhost:9200      │
+              │                        │
+              │ Multi-tenant indexes:  │
+              │ {domain}-audit-data-   │
+              │    {env}-ttl{X}d       │
+              └────────────────────────┘
+                            │
+                            ▼
+              ┌────────────────────────┐
+              │  OpenSearch Dashboards │
+              │    localhost:5601      │
+              │  (Kibana-like UI)      │
+              └────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────┐
+│  kockpit-backend-application (Optional - for manual queries)   │
+│  Port: 8080                                                    │
+│  • Audit Search API                                            │
+│  • Dashboard Analytics                                         │
+└────────────────────────────────────────────────────────────────┘
 ```
+
+**Benefits of Kafka Streaming:**
+- ✅ **Asynchronous**: No impact on application performance
+- ✅ **Resilient**: Kafka guarantees message delivery
+- ✅ **Scalable**: Can handle millions of audit events
+- ✅ **Decoupled**: Applications and indexing are independent
 
 ## 📁 Project Structure
 
@@ -93,7 +116,18 @@ kockpit-client-monorepo/
 │   ├── docker-compose-dev.yml         # OpenSearch + Kafka + Dashboards
 │   └── README.md                      # Infrastructure documentation
 │
-├── kockpit-backend-application/       # Backend API service
+├── kockpit-audit-stream-kafka/        # Kafka Stream Consumer (NEW!)
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/org/kockpit/audit/stream/
+│   │   │   └── resources/
+│   │   │       ├── application.yml            # Base configuration
+│   │   │       └── application-local.yml      # Local dev config
+│   │   └── test/
+│   ├── pom.xml                        # Maven dependencies
+│   └── README.md                      # Stream consumer documentation
+│
+├── kockpit-backend-application/       # Backend API service (Optional)
 │   ├── src/
 │   │   ├── main/
 │   │   │   ├── java/org/kockpit/backend/
@@ -113,7 +147,7 @@ kockpit-client-monorepo/
 │   │   │   ├── repository/            # Data access (in-memory)
 │   │   │   └── model/                 # Domain models
 │   │   └── resources/
-│   │       ├── application.yaml       # Application config
+│   │       ├── application.yaml       # Application config (Kafka mode)
 │   │       └── application-local.yaml # Local development config
 │   ├── kockpit-doc/                   # Comprehensive documentation
 │   │   ├── START-HERE.txt
@@ -127,6 +161,7 @@ kockpit-client-monorepo/
 ├── .gitignore                         # Git ignore rules
 ├── README.md                          # This file
 ├── ARCHITECTURE.md                    # Detailed architecture guide
+├── SECURITY.md                        # Security best practices
 └── LICENSE                            # License information
 ```
 
@@ -179,25 +214,33 @@ curl http://localhost:9200        # OpenSearch
 docker ps                         # Check all containers
 ```
 
-### 2. Build and Start Backend
+**Services started:**
+- Kafka: localhost:9092
+- OpenSearch: localhost:9200
+- OpenSearch Dashboards: localhost:5601
+
+### 2. Start Kafka Stream Consumer
+
+**Important:** This application consumes audit events from Kafka and indexes them to OpenSearch.
 
 ```bash
-cd kockpit-backend-application
+# Navigate to the kockpit-audit-stream-kafka module (in this monorepo)
+cd kockpit-audit-stream-kafka
 
-# Build with both Maven profiles
-mvn clean compile -Popensearch,filesystem
+# Start the consumer
+mvn spring-boot:run -Dspring-boot.run.profiles=local
 
-# Start backend API
-mvn spring-boot:run -Popensearch,filesystem -Dspring-boot.run.profiles=opensearch,filesystem
-
-# Or from IntelliJ:
-# 1. Open Maven panel → Profiles
-# 2. Check: opensearch + filesystem
-# 3. Reload Maven projects
-# 4. Run with Spring profiles: opensearch,filesystem
+# Wait for: "Started KockpitStreamApplication in X.XXX seconds"
 ```
 
-**Backend will be available at:** `http://localhost:8080/backend/api`
+**Kafka Stream Consumer will be available at:** `http://localhost:9080`
+
+Configuration:
+- Kafka Consumer Group: `kockpit-audit-stream`
+- Kafka Topic: `audit`
+- OpenSearch: `http://localhost:9200`
+- Batch size: 50 messages
+- Index interval: Every 5 seconds
 
 ### 3. Start Demo Application
 
@@ -221,10 +264,34 @@ curl -X POST http://localhost:8091/demo/api/api/products \
   -H "Content-Type: application/json" \
   -d '{"name":"Laptop","price":999.99,"stock":10}'
 
-# Search audits in backend
-curl -u user:password \
-  "http://localhost:8080/backend/api/demo/local/audits/_search?start=0&size=10"
+# Verify audit was sent to Kafka
+# Check the kockpit-audit-stream console logs for:
+# "indexing took X ms" - confirms the audit was indexed to OpenSearch
+
+# View audits in OpenSearch Dashboards
+open http://localhost:5601
+# Create index pattern: demo-audit-data-*
+# Time field: start
+
+# Or query OpenSearch directly
+curl "http://localhost:9200/*audit*/_search?pretty"
 ```
+
+### Optional: Start Backend for Manual Queries
+
+The backend API is **optional** in Kafka mode - it's only needed if you want to query audits via REST API instead of OpenSearch Dashboards.
+
+```bash
+cd kockpit-backend-application
+
+# Build with both Maven profiles
+mvn clean compile -Popensearch,filesystem
+
+# Start backend API
+mvn spring-boot:run -Popensearch,filesystem -Dspring-boot.run.profiles=opensearch,filesystem
+```
+
+**Backend will be available at:** `http://localhost:8080/backend/api`
 
 ## 📚 Detailed Setup
 
@@ -363,19 +430,55 @@ curl -X POST http://localhost:8091/demo/api/api/orders/{orderId}/ship \
 ### Environment Variables
 
 ```bash
-# Backend
+# Infrastructure
 export OPENSEARCH_ENDPOINTS=http://localhost:9200
 export INDEX_NAME=kockpit-audit
 
-# Demo App
-export KOCKPIT_BACKEND_URL=http://localhost:8080/backend/api
+# Kafka (already configured in docker-compose)
+# No additional environment variables needed for demo
+
+# Optional - if running backend API
 export KOCKPIT_USERNAME=user
-export KOCKPIT_PASSWORD=password
+export KOCKPIT_PASSWORD=your_secure_password_here
+# WARNING: Never commit actual passwords! Change for production!
 ```
 
 ### Application Properties
 
-#### Backend (application-opensearch.yaml)
+#### Demo App (application.yaml) - Kafka Mode
+
+```yaml
+spring:
+  application:
+    name: kockpit-demo-app
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+kockpit:
+  sdk:
+    domain: demo                    # Application domain
+    env: ${ENVIRONMENT:local}       # Environment (local, dev, prod)
+    appId: demo-app                 # Application identifier
+    enabled: true                   # Enable audit
+    service:
+      audit:
+        notification:
+          topic: audit              # Kafka topic for audit events
+
+# Audits are sent to Kafka topic "audit" (asynchronous, no HTTP backend)
+# kockpit-audit-stream-application-kafka consumes and indexes to OpenSearch
+```
+
+**Key Configuration Points:**
+- **Kafka Bootstrap Server**: `localhost:9092`
+- **Audit Topic**: `audit`
+- **No HTTP Backend**: Audits go directly to Kafka
+- **Domain/Env/AppId**: Used for OpenSearch index naming
+
+#### Backend (application-opensearch.yaml) - Optional
 
 ```yaml
 kockpit:
@@ -387,21 +490,6 @@ kockpit:
     opensearch:
       index: ${INDEX_NAME:kockpit-audit}
       endpoints: ${OPENSEARCH_ENDPOINTS:http://localhost:9200}
-```
-
-#### Demo App (application.yaml)
-
-```yaml
-kockpit:
-  sdk:
-    domain: demo
-    env: ${ENVIRONMENT:local}
-    appId: demo-app
-  audit:
-    backend:
-      url: http://localhost:8080/backend/api
-      username: user
-      password: password
 ```
 
 ### Multi-tenant Setup
@@ -435,8 +523,10 @@ Examples:
 #### Authentication
 
 All endpoints require HTTP Basic Auth:
-- Username: `user`
-- Password: `password`
+- Username: Configured via environment variable
+- Password: **MUST be set via `KOCKPIT_PASSWORD` environment variable**
+
+**Security Warning**: The examples below use placeholder credentials. Always use environment variables and never commit real passwords to version control.
 
 #### Audit Endpoints
 

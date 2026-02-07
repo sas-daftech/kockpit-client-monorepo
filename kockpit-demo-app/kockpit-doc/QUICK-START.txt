@@ -1,0 +1,275 @@
+================================================================================
+                    KOCKPIT BACKENDS - QUICK START
+================================================================================
+
+Ce guide vous permet de demarrer rapidement avec Kockpit Backends en
+5 minutes.
+
+================================================================================
+                           PRE-REQUIS
+================================================================================
+
+Logiciels installes:
+  [x] Java 21+
+  [x] Maven 3.8+
+  [x] Docker & Docker Compose
+  [x] Git
+
+Verification:
+  $ java -version
+  openjdk version "21.0.x"
+
+  $ mvn -version
+  Apache Maven 3.9.x
+
+  $ docker --version
+  Docker version 24.x.x
+
+
+================================================================================
+                      ETAPE 1: CLONER LE PROJET
+================================================================================
+
+$ cd /home/debian/sources/kiss
+$ git clone <repository-url> kockpit
+$ cd kockpit/kockpit-backends
+
+
+================================================================================
+                   ETAPE 2: DEMARRER OPENSEARCH
+================================================================================
+
+$ cd /home/debian/sources/others/opensearch
+
+$ docker compose -f docker-compose-dev.yml up -d
+
+Attendre 10-15 secondes que OpenSearch demarre...
+
+Verifier:
+$ curl http://localhost:9200
+
+Vous devez voir:
+{
+  "name" : "opensearch-node1",
+  "cluster_name" : "opensearch-cluster-dev",
+  ...
+}
+
+
+================================================================================
+              ETAPE 3: CONFIGURER L'APPLICATION
+================================================================================
+
+1. Creer le repertoire de stockage:
+   $ mkdir -p /tmp/kockpit-storage
+
+2. La configuration est deja prete dans:
+   kockpit-backends/kockpit-backend-application/src/main/resources/
+     └── application-local.yaml
+
+   Contenu:
+     kockpit:
+       audit:
+         opensearch:
+           index: kockpit-audit
+           endpoints: http://localhost:9200
+         local:
+           storage-path: /tmp/kockpit-storage
+
+
+================================================================================
+               ETAPE 4: DEMARRER L'APPLICATION
+================================================================================
+
+Option A - Via IntelliJ IDEA (recommande):
+
+  1. Ouvrir IntelliJ IDEA
+  2. File -> Open -> kockpit/pom.xml
+  3. Naviguer vers:
+     kockpit-backends/kockpit-backend-application/src/main/java/
+       org/kockpit/backend/KockpitAuditBackendApplication.java
+  4. Clic droit -> Run
+  5. Modifier la configuration:
+     Active profiles: local,opensearch,filesystem
+  6. Relancer
+
+
+Option B - Via Maven:
+
+  $ cd kockpit-backends/kockpit-backend-application
+  $ mvn spring-boot:run \
+      -Dspring-boot.run.profiles=local,opensearch,filesystem
+
+
+Vous devez voir:
+  Started KockpitAuditBackendApplication in X.XXX seconds
+
+
+================================================================================
+                   ETAPE 5: TESTER L'APPLICATION
+================================================================================
+
+# Test 1: Health check
+$ curl http://localhost:8080/backend/actuator/health
+
+# Test 2: Rechercher des audits (vide au debut)
+$ curl -u user:password \
+  http://localhost:8080/backend/api/rcu/local/audits/_search
+
+Reponse attendue:
+{"size":0,"items":[],"total_count":0}
+
+# Test 3: Lister les configurations
+$ curl -u user:password \
+  http://localhost:8080/backend/api/config
+
+Reponse attendue:
+[]
+
+
+================================================================================
+                      ENDPOINTS DISPONIBLES
+================================================================================
+
+BASE URL: http://localhost:8080/backend/api
+
+Authentification:
+  Username: user
+  Password: password
+
+Audits:
+  GET    /{domain}/{env}/audits/_search
+  GET    /{domain}/{env}/audits/{id}
+  POST   /{domain}/{env}/audits/_search
+
+Configuration:
+  GET    /config
+  POST   /config
+
+Feature Flipping:
+  PUT    /{domain}/{env}/feature-flipping?key=xxx
+  GET    /{domain}/{env}/feature-flipping/history
+
+Actuator:
+  GET    /backend/actuator/health
+
+
+Exemple d'utilisation:
+  domain = rcu
+  env = local
+
+  URL complete:
+  http://localhost:8080/backend/api/rcu/local/audits/_search
+
+
+================================================================================
+                       DASHBOARD OPENSEARCH
+================================================================================
+
+OpenSearch Dashboards est accessible sur:
+  http://localhost:5601
+
+Pas d'authentification requise (mode dev).
+
+Fonctionnalites:
+  - Visualisation des index
+  - Execution de requetes
+  - Creation de dashboards
+  - Monitoring du cluster
+
+
+================================================================================
+                        TROUBLESHOOTING
+================================================================================
+
+Probleme: L'application ne demarre pas
+Solution:
+  1. Verifier qu'OpenSearch est demarre:
+     curl http://localhost:9200
+
+  2. Verifier les logs de l'application
+     Chercher les erreurs dans la console
+
+  3. Verifier que le port 8080 n'est pas utilise:
+     netstat -tulpn | grep 8080
+
+
+Probleme: Erreur de connexion a OpenSearch
+Solution:
+  1. Verifier la configuration dans application-local.yaml
+  2. Verifier qu'OpenSearch repond:
+     curl http://localhost:9200/_cluster/health
+
+  3. Regarder les logs OpenSearch:
+     docker logs opensearch-node1-dev
+
+
+Probleme: Authentification echoue
+Solution:
+  1. Utiliser les credentials par defaut:
+     username: user
+     password: password
+
+  2. Encoder en Base64:
+     echo -n "user:password" | base64
+     Resultat: dXNlcjpwYXNzd29yZA==
+
+  3. Utiliser dans le header:
+     Authorization: Basic dXNlcjpwYXNzd29yZA==
+
+
+Probleme: 404 sur les endpoints
+Solution:
+  Verifier le context path: /backend/api
+  URL correcte: http://localhost:8080/backend/api/rcu/local/audits/_search
+
+
+================================================================================
+                        ARRETER LES SERVICES
+================================================================================
+
+# Arreter l'application Spring Boot
+  - Ctrl+C dans le terminal
+  - Ou Stop dans IntelliJ
+
+# Arreter OpenSearch
+$ cd /home/debian/sources/others/opensearch
+$ docker compose -f docker-compose-dev.yml down
+
+
+================================================================================
+                        PROCHAINES ETAPES
+================================================================================
+
+1. Lire la documentation complete:
+   /home/debian/sources/kiss/kockpit-doc/ARCHITECTURE.txt
+
+2. Explorer les endpoints avec Swagger UI (si active):
+   http://localhost:8080/swagger-ui.html
+
+3. Consulter les metriques Actuator:
+   http://localhost:8080/backend/actuator
+
+4. Creer vos premiers audits de test
+
+5. Configurer pour d'autres environnements (dev, staging, prod)
+
+
+================================================================================
+                        RESSOURCES UTILES
+================================================================================
+
+Documentation:
+  - Spring Boot: https://spring.io/projects/spring-boot
+  - OpenSearch: https://opensearch.org/docs/latest/
+  - Docker Compose: https://docs.docker.com/compose/
+
+Support:
+  - Issues: (a completer)
+  - Wiki: (a completer)
+  - Slack: (a completer)
+
+
+================================================================================
+                           BON DEVELOPPEMENT !
+================================================================================

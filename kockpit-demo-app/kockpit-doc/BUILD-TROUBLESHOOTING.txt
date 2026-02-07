@@ -1,0 +1,369 @@
+================================================================================
+                    KOCKPIT - BUILD TROUBLESHOOTING GUIDE
+================================================================================
+
+Version: 1.0.0-SNAPSHOT
+Date: 2025-12-02
+Auteurs: Kockpit Development Team
+
+================================================================================
+                              INTRODUCTION
+================================================================================
+
+Ce document documente les problèmes de compilation rencontrés lors de la
+configuration initiale du projet Kockpit et les solutions appliquées.
+
+Ces corrections sont essentielles pour que le projet puisse être compilé
+avec succès sur n'importe quel environnement de développement.
+
+
+================================================================================
+                         PROBLÈMES IDENTIFIÉS
+================================================================================
+
+1. INCOMPATIBILITÉ VERSION JAVA
+   Symptôme:
+   - Fatal error compiling: java.lang.ExceptionInInitializerError
+   - TypeTag :: UNKNOWN error lors de la compilation
+
+   Cause:
+   - Le projet nécessite Java 21 (défini dans maven.compiler.release)
+   - Une mauvaise version Java était configurée dans l'environnement
+   - Lombok doit être compatible avec Java 21
+
+2. LOMBOK NON CONFIGURÉ POUR MAVEN COMPILER
+   Symptôme:
+   - org.kockpit.audit.api.AbstractAuditEvent is not abstract and does
+     not override abstract method getEndTime()
+   - Les méthodes générées par @Data, @Builder ne sont pas reconnues
+
+   Cause:
+   - Le Maven Compiler Plugin n'était pas configuré pour traiter les
+     annotations Lombok
+   - annotationProcessorPaths manquant dans la configuration
+
+3. DÉPENDANCES LOMBOK MANQUANTES
+   Symptôme:
+   - package lombok does not exist
+   - cannot find symbol: class Slf4j, Data, Builder, etc.
+
+   Cause:
+   - Certains modules (ex: kockpit-audit-httpexchange) utilisaient
+     des annotations Lombok sans déclarer la dépendance
+
+
+================================================================================
+                         SOLUTIONS APPLIQUÉES
+================================================================================
+
+SOLUTION 1: Configuration Maven Compiler Plugin avec Lombok
+------------------------------------------------------------
+
+Fichier: /home/debian/sources/kiss/kockpit/pom.xml
+Localisation: Ligne 25-43
+
+Ajout dans le pom parent:
+
+<build>
+    <pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </pluginManagement>
+</build>
+
+Explication:
+- Cette configuration indique au compilateur Maven d'utiliser Lombok
+  comme annotation processor
+- Appliqué à tous les modules enfants via pluginManagement
+- Utilise ${lombok.version} définie dans Spring Boot parent (1.18.36)
+
+
+SOLUTION 2: Ajout dépendance Lombok dans kockpit-audit-httpexchange
+--------------------------------------------------------------------
+
+Fichier: kockpit-audit/kockpit-audit-httpexchange/pom.xml
+Localisation: Ligne 13-17
+
+Ajout:
+
+<dependencies>
+    <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <scope>provided</scope>
+    </dependency>
+    <!-- ... autres dépendances ... -->
+</dependencies>
+
+Explication:
+- Ce module utilisait @Slf4j, @Data, @Builder sans déclarer Lombok
+- scope=provided car Lombok n'est nécessaire qu'à la compilation
+
+
+SOLUTION 3: Correction scope Lombok dans kockpit-audit-api
+-----------------------------------------------------------
+
+Fichier: kockpit-audit/kockpit-audit-api/pom.xml
+Localisation: Ligne 13-17
+
+Modification:
+
+<dependency>
+    <groupId>org.projectlombok</groupId>
+    <artifactId>lombok</artifactId>
+    <scope>provided</scope>   <!-- Ajout du scope -->
+</dependency>
+
+Explication:
+- Lombok doit être en scope 'provided' (pas 'compile')
+- N'est pas nécessaire au runtime, seulement à la compilation
+
+
+================================================================================
+                      PROCÉDURE DE BUILD CORRECTE
+================================================================================
+
+PRÉREQUIS
+---------
+- Java 21 (obligatoire)
+- Maven 3.8+
+- Git
+
+VÉRIFICATION VERSION JAVA
+--------------------------
+
+1. Vérifier la version Java active:
+   $ java -version
+
+   Résultat attendu:
+   openjdk version "21.0.x"
+
+2. Si une autre version est active, changer vers Java 21:
+
+   Avec SDKMAN:
+   $ sdk use java 21.0.x-<distribution>
+
+   Ou définir JAVA_HOME manuellement:
+   $ export JAVA_HOME=/path/to/java-21
+   $ export PATH=$JAVA_HOME/bin:$PATH
+
+
+BUILD COMPLET DU PROJET
+------------------------
+
+1. Cloner le projet (si pas déjà fait):
+   $ git clone <repo-url> kockpit
+   $ cd kockpit
+
+2. Build complet avec Java 21:
+
+   Option A - Si Java 21 est la version par défaut:
+   $ mvn clean install -DskipTests
+
+   Option B - En spécifiant JAVA_HOME:
+   $ JAVA_HOME=/path/to/java-21 mvn clean install -DskipTests
+
+3. Vérifier le succès du build:
+   [INFO] BUILD SUCCESS
+   [INFO] Total time: XX.XXX s
+
+
+BUILD D'UN MODULE SPÉCIFIQUE
+-----------------------------
+
+Pour builder uniquement un module après une modification:
+
+$ JAVA_HOME=/path/to/java-21 mvn clean install -DskipTests \
+  -pl :nom-du-module -am
+
+Exemple:
+$ JAVA_HOME=/path/to/java-21 \
+  mvn clean install -DskipTests \
+  -pl :kockpit-backend-application -am
+
+
+BUILD BACKEND APPLICATION UNIQUEMENT
+-------------------------------------
+
+$ cd kockpit-backends/kockpit-backend-application
+$ JAVA_HOME=/path/to/java-21 mvn clean package -DskipTests
+
+
+================================================================================
+                         VÉRIFICATION POST-BUILD
+================================================================================
+
+VÉRIFIER LES ARTEFACTS GÉNÉRÉS
+-------------------------------
+
+1. Vérifier le JAR de l'application backend:
+   $ ls -lh kockpit-backends/kockpit-backend-application/target/*.jar
+
+   Attendu:
+   kockpit-backend-application-1.0.0-SNAPSHOT.jar
+
+2. Vérifier l'installation dans le repository Maven local:
+   $ ls ~/.m2/repository/org/kockpit/
+
+   Attendu: tous les modules kockpit-* installés
+
+
+TESTER LA COMPILATION
+----------------------
+
+Compiler sans clean pour vérifier la compilation incrémentale:
+
+$ JAVA_HOME=/path/to/java-21 mvn compile
+
+Aucune erreur ne doit apparaître.
+
+
+================================================================================
+                         PROBLÈMES RÉSIDUELS
+================================================================================
+
+Si des erreurs persistent après application des solutions:
+
+1. NETTOYER LE CACHE MAVEN
+   $ rm -rf ~/.m2/repository/org/kockpit
+   $ mvn clean install -U -DskipTests
+
+2. VÉRIFIER LA VERSION EFFECTIVE DE JAVA
+   $ mvn -version
+
+   La ligne "Java version" doit indiquer 21.0.x
+
+3. VÉRIFIER QUE LOMBOK EST BIEN RÉSOLU
+   $ mvn dependency:tree | grep lombok
+
+   Attendu:
+   [INFO] +- org.projectlombok:lombok:jar:1.18.36:provided
+
+4. COMPILER AVEC DEBUG COMPLET
+   $ JAVA_HOME=/path/to/java-21 mvn clean compile -X 2>&1 | tee build-debug.log
+
+
+================================================================================
+                    DÉTAILS TECHNIQUES ADDITIONNELS
+================================================================================
+
+POURQUOI JAVA 21?
+-----------------
+- Le pom.xml parent définit: <maven.compiler.release>21</maven.compiler.release>
+- Spring Boot 3.4.3 est compatible avec Java 21
+- Lombok est testé et compatible avec Java 21
+
+POURQUOI ANNOTATIONPROCESSORPATHS?
+-----------------------------------
+- Maven Compiler Plugin 3.13.0 nécessite une configuration explicite
+  des annotation processors
+- Lombok génère du code à la compilation via annotation processing
+- Sans cette configuration, les annotations @Data, @Builder, etc. sont
+  ignorées silencieusement
+
+SCOPE PROVIDED POUR LOMBOK
+---------------------------
+- Lombok transforme le bytecode à la compilation
+- Les classes générées n'ont pas besoin de Lombok au runtime
+- provided = disponible à la compilation, absent du classpath runtime
+- Réduit la taille du JAR final
+
+
+================================================================================
+                         CHECKLIST VALIDATION
+================================================================================
+
+Avant de considérer le build comme fonctionnel:
+
+[ ] Java 21 est installé et actif
+[ ] mvn -version affiche Java version 21.0.x
+[ ] Le pom.xml parent contient la configuration annotationProcessorPaths
+[ ] kockpit-audit-httpexchange/pom.xml déclare la dépendance lombok
+[ ] kockpit-audit-api/pom.xml déclare lombok avec scope=provided
+[ ] mvn clean install -DskipTests réussit sans erreur
+[ ] Le JAR backend est généré dans target/
+[ ] Les modules sont installés dans ~/.m2/repository/org/kockpit/
+
+
+================================================================================
+                         COMMANDES UTILES
+================================================================================
+
+# Build complet du projet
+JAVA_HOME=/path/to/java-21 mvn clean install -DskipTests
+
+# Build uniquement le backend
+JAVA_HOME=/path/to/java-21 mvn clean package -DskipTests \
+  -pl :kockpit-backend-application -am
+
+# Vérifier les dépendances
+mvn dependency:tree
+
+# Nettoyer complètement
+mvn clean && rm -rf ~/.m2/repository/org/kockpit
+
+# Build avec logs de debug
+JAVA_HOME=/path/to/java-21 mvn clean install -X -DskipTests
+
+# Compiler un seul module
+cd module-name && JAVA_HOME=/path/to/java-21 mvn compile
+
+
+================================================================================
+                         POUR ALLER PLUS LOIN
+================================================================================
+
+Documentation complémentaire dans kockpit-doc/:
+
+- README.txt              : Vue d'ensemble du projet
+- QUICK-START.txt         : Guide de démarrage rapide
+- ARCHITECTURE.txt        : Architecture détaillée
+- API-REFERENCE.txt       : Référence des APIs
+- DEMO-APP-GUIDE.txt      : Guide de l'application démo
+
+
+================================================================================
+                         SUPPORT ET CONTRIBUTION
+================================================================================
+
+Si vous rencontrez d'autres problèmes de build:
+
+1. Vérifier que toutes les solutions de ce document sont appliquées
+2. Vérifier les issues GitHub du projet
+3. Consulter les logs de build complets
+4. Créer une issue avec:
+   - Version de Java (java -version)
+   - Version de Maven (mvn -version)
+   - Système d'exploitation
+   - Logs complets de l'erreur
+
+
+================================================================================
+                         CHANGELOG DES FIXES
+================================================================================
+
+2025-12-02 - Build Initial Fixes
+  - Ajout configuration annotationProcessorPaths pour Lombok
+  - Ajout dépendance Lombok dans kockpit-audit-httpexchange
+  - Correction scope Lombok dans kockpit-audit-api
+  - Documentation complète du troubleshooting
+
+
+================================================================================
+
+Pour toute question: (à compléter)
+
+================================================================================

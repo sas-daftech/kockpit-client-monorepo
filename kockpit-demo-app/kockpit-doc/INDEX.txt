@@ -1,0 +1,515 @@
+================================================================================
+                    KOCKPIT BACKENDS - DOCUMENTATION INDEX
+================================================================================
+
+Date de creation: 2025-12-01
+Version: 1.0.0-SNAPSHOT
+
+Ce repertoire contient toute la documentation du projet Kockpit Backends.
+
+⭐ NOUVEAU SUR LE PROJET? → Lire START-HERE.txt en premier !
+
+
+================================================================================
+                         FICHIERS DISPONIBLES
+================================================================================
+
+0. START-HERE.txt (9 KB) ⭐ COMMENCER ICI
+   Guide d'orientation pour nouveaux arrivants
+
+   Contenu:
+     - Demarrage rapide (5 min)
+     - Parcours recommandes par profil
+       * Developpeur
+       * Architecte / Tech Lead
+       * Testeur / QA
+       * Ops / DevOps
+     - Problemes frequents et solutions
+     - Commandes essentielles
+     - Ressources utiles
+
+   Public cible: Tous les nouveaux arrivants
+   A lire en PREMIER: OUI ⭐
+
+
+--------------------------------------------------------------------------------
+
+1. README.txt (12 KB)
+   Vue d'ensemble du projet
+
+   Contenu:
+     - Description generale
+     - Technologies utilisees
+     - Architecture
+     - Endpoints principaux
+     - Demarrage rapide
+     - Configuration
+     - Securite
+     - Build & Deploiement
+     - Troubleshooting
+     - Contribution
+
+   Public cible: Tous
+   A lire en premier: OUI
+
+
+--------------------------------------------------------------------------------
+
+2. QUICK-START.txt (7.6 KB)
+   Guide de demarrage rapide (5 minutes)
+
+   Contenu:
+     - Pre-requis
+     - Cloner le projet
+     - Demarrer OpenSearch
+     - Configurer l'application
+     - Demarrer l'application
+     - Tester les endpoints
+     - Dashboard OpenSearch
+     - Troubleshooting
+
+   Public cible: Developpeurs debutants sur le projet
+   A lire en premier: OUI (apres README.txt)
+
+
+--------------------------------------------------------------------------------
+
+3. ARCHITECTURE.txt (32 KB)
+   Documentation architecture complete
+
+   Contenu:
+     - Introduction
+     - Architecture globale
+     - Modules principaux (detail complet)
+       * kockpit-backend-application
+       * kockpit-backend-authentication-basic
+       * kockpit-backend-service-search
+       * kockpit-backend-service-storage
+       * kockpit-service-featureflipping
+     - Flux de donnees
+     - Patterns architecturaux
+       * Hexagonal Architecture
+       * Strategy Pattern
+       * Auto-configuration Spring Boot
+       * Multi-tenancy
+     - Configuration detaillee
+     - Securite
+     - Deploiement
+     - Developpement local
+
+   Public cible: Architectes, developpeurs confirmés
+   A lire pour: Comprendre en profondeur l'architecture
+
+
+--------------------------------------------------------------------------------
+
+4. API-REFERENCE.txt (19 KB)
+   Reference complete des APIs REST
+
+   Contenu:
+     - Authentification
+     - Audits API
+       * Rechercher (GET)
+       * Rechercher avec filtres (POST)
+       * Recuperer par ID
+       * Lister
+     - Configuration API
+       * Lister
+       * Creer
+     - Feature Flipping API
+       * Activer/Desactiver
+       * Historique
+     - Actuator Endpoints
+     - Codes d'erreur
+     - Exemples complets
+       * Recherche avec filtres
+       * Deploiement progressif
+       * Configuration applicative
+       * Script de monitoring
+
+   Public cible: Developpeurs frontend, integrateurs, testeurs
+   A lire pour: Integrer les APIs
+
+
+--------------------------------------------------------------------------------
+
+5. VISUAL-ARCHITECTURE.txt (16 KB)
+   Diagrammes ASCII de l'architecture
+
+   Contenu:
+     - Vue d'ensemble du systeme
+     - Structure des modules
+     - Flux de donnees
+     - Diagrammes de sequence
+     - Schemas de deploiement
+
+   Public cible: Architectes, developpeurs
+   A lire pour: Visualiser l'architecture
+
+
+--------------------------------------------------------------------------------
+
+6. DEMO-APP-GUIDE.txt (55 KB)
+   Guide complet de l'application demo
+
+   Contenu:
+     - Vue d'ensemble de la demo
+     - Architecture de la demo
+     - Structure du projet
+     - Configuration
+     - Cas d'usage implementes
+     - Endpoints REST
+     - Demarrage rapide
+     - Tests et validation
+     - Personnalisation
+     - Troubleshooting
+     - Annexes et exemples avances
+
+   Public cible: Developpeurs debutants/confirmes
+   A lire pour: Creer une application utilisant kockpit-audit-sdk
+
+
+--------------------------------------------------------------------------------
+
+7. DEMO-APP-TROUBLESHOOTING.txt (8 KB)
+   Guide de resolution des problemes de la demo
+
+   Contenu:
+     - Problemes de compilation connus
+     - Solutions et workarounds
+     - Audit manuel sans annotations
+     - Scenario de test minimal
+     - Assistance
+
+   Public cible: Developpeurs rencontrant des problemes
+   A lire pour: Resoudre les erreurs de compilation
+
+
+--------------------------------------------------------------------------------
+
+8. SESSION-CONTEXT.txt (12 KB)
+   Contexte de la session de travail initiale
+
+   Contenu:
+     - Problemes rencontres et resolus
+     - Configuration finale fonctionnelle
+     - Architecture analysee
+     - Documentation creee
+     - Commandes cles
+     - Etat final du systeme
+     - Points cles a retenir
+     - Prochaines etapes
+
+   Public cible: Reference historique
+   A lire pour: Comprendre l'evolution du projet
+
+
+--------------------------------------------------------------------------------
+
+9. BUILD-TROUBLESHOOTING.txt (18 KB)
+   Guide de resolution des problemes de build/compilation
+
+   Contenu:
+     - Problemes de compilation identifies
+       * Incompatibilite version Java
+       * Lombok non configure pour Maven Compiler
+       * Dependances Lombok manquantes
+     - Solutions detaillees appliquees
+       * Configuration annotationProcessorPaths
+       * Ajout dependances manquantes
+       * Correction des scopes
+     - Procedure de build correcte
+     - Verification post-build
+     - Checklist de validation
+     - Commandes utiles
+     - Details techniques (pourquoi Java 17, Lombok, etc.)
+
+   Public cible: Developpeurs rencontrant des erreurs de build
+   A lire pour: Resoudre les problemes de compilation Maven/Lombok
+
+
+--------------------------------------------------------------------------------
+
+10. CHANGELOG-BUILD-FIXES.txt (8 KB)
+   Historique detaille des corrections de build
+
+   Contenu:
+     - Resume des problemes resolus
+     - Fichiers modifies avec details
+     - Documentation ajoutee
+     - Validation et impact
+     - Compatibilite testee
+     - Notes techniques
+     - Checklist post-installation
+
+   Public cible: Developpeurs, Ops, Reference technique
+   A lire pour: Comprendre les modifications du build
+
+
+--------------------------------------------------------------------------------
+
+11. KAFKA-QUICK-START.txt (XX KB) ⭐ NOUVEAU
+   Guide de démarrage rapide avec Kafka
+
+   Contenu:
+     - Architecture événementielle avec Kafka
+     - Installation et configuration complète
+     - Démarrer Kafka + OpenSearch (Docker)
+     - Démarrer le Kafka Stream Consumer
+     - Configurer la Demo App pour Kafka
+     - Tester le flux complet
+     - Visualiser dans OpenSearch Dashboards
+     - Configuration avancée
+     - Monitoring et observabilité
+     - Résumé des ports
+
+   Public cible: Développeurs, Architectes
+   A lire pour: Implémenter un audit trail événementiel scalable
+
+
+--------------------------------------------------------------------------------
+
+12. KAFKA-TROUBLESHOOTING.txt (XX KB) ⭐ NOUVEAU
+   Guide de résolution des problèmes Kafka
+
+   Contenu:
+     - ConfigApiService bean not found
+     - Duplicate bean HttpAuditReportNotificationService
+     - Configuration Kafka incorrecte
+     - Duplicate key 'sdk' in YAML
+     - Kafka bootstrap servers not configured
+     - Topic mismatch producer/consumer
+     - OpenSearch Dashboards ne montre rien
+     - Kafka Stream Consumer ne démarre pas
+     - OpenSearch connection refused
+     - Kafka consumer lag élevé
+     - Vérifications de santé du système
+     - Commandes de diagnostic utiles
+     - Performances et optimisation
+     - Nettoyage et reset complet
+
+   Public cible: Développeurs rencontrant des problèmes avec Kafka
+   A lire pour: Résoudre les erreurs d'intégration Kafka
+
+
+--------------------------------------------------------------------------------
+
+13. INDEX.txt (ce fichier)
+   Index de la documentation
+
+   Navigation rapide dans la documentation.
+
+
+================================================================================
+                         PARCOURS RECOMMANDES
+================================================================================
+
+Pour un nouveau developpeur:
+  1. README.txt                (10 min)
+  2. BUILD-TROUBLESHOOTING.txt (15 min) - Si problemes de build
+  3. QUICK-START.txt           (15 min)
+  4. DEMO-APP-GUIDE.txt        (30 min)
+  5. API-REFERENCE.txt         (30 min)
+  6. ARCHITECTURE.txt          (1h)
+
+Pour un architecte:
+  1. README.txt           (10 min)
+  2. ARCHITECTURE.txt     (1h)
+  3. API-REFERENCE.txt    (20 min)
+
+Pour un integrateur/testeur:
+  1. README.txt           (10 min)
+  2. QUICK-START.txt      (15 min)
+  3. API-REFERENCE.txt    (45 min)
+
+Pour un ops/devops:
+  1. README.txt           (10 min)
+  2. QUICK-START.txt      (15 min)
+  3. ARCHITECTURE.txt
+     - Section 8: Deploiement  (30 min)
+     - Section 9: Dev local    (15 min)
+
+
+================================================================================
+                         RECHERCHE PAR SUJET
+================================================================================
+
+Installation & Demarrage:
+  - QUICK-START.txt : Tout le processus
+  - ARCHITECTURE.txt : Section 9 (Dev local)
+
+Architecture:
+  - ARCHITECTURE.txt : Sections 2-5
+  - README.txt : Section Architecture
+
+APIs:
+  - API-REFERENCE.txt : Tout le fichier
+  - README.txt : Section Endpoints principaux
+
+Configuration:
+  - ARCHITECTURE.txt : Section 6
+  - QUICK-START.txt : Etape 3
+  - README.txt : Section Configuration
+
+Securite:
+  - ARCHITECTURE.txt : Section 7
+  - API-REFERENCE.txt : Section 1
+  - README.txt : Section Securite
+
+Deploiement:
+  - ARCHITECTURE.txt : Section 8
+  - README.txt : Section Build & Deploiement
+
+Troubleshooting:
+  - BUILD-TROUBLESHOOTING.txt : Problemes de build/compilation Maven
+  - DEMO-APP-TROUBLESHOOTING.txt : Problemes de l'application demo
+  - QUICK-START.txt : Section Troubleshooting
+  - ARCHITECTURE.txt : Section 9.5 (Debugging)
+  - README.txt : Section Troubleshooting
+
+Build & Compilation:
+  - BUILD-TROUBLESHOOTING.txt : Guide complet des problemes de build
+  - README.txt : Section Build & Deploiement
+
+OpenSearch:
+  - QUICK-START.txt : Etape 2
+  - ARCHITECTURE.txt : Section 3.3.2
+  - ARCHITECTURE.txt : Section 9.2
+
+Multi-tenancy:
+  - ARCHITECTURE.txt : Section 5.4
+  - API-REFERENCE.txt : Parametres path
+
+Feature Flipping:
+  - ARCHITECTURE.txt : Section 3.5
+  - API-REFERENCE.txt : Section 4
+  - API-REFERENCE.txt : Section 7.2 (exemple)
+
+Stockage:
+  - ARCHITECTURE.txt : Section 3.4
+  - API-REFERENCE.txt : Section 3
+
+
+================================================================================
+                         GLOSSAIRE
+================================================================================
+
+API         : Application Programming Interface
+REST        : Representational State Transfer
+HTTP        : Hypertext Transfer Protocol
+JSON        : JavaScript Object Notation
+CRUD        : Create, Read, Update, Delete
+DTO         : Data Transfer Object
+JVM         : Java Virtual Machine
+JAR         : Java Archive
+POM         : Project Object Model (Maven)
+YAML        : YAML Ain't Markup Language
+CORS        : Cross-Origin Resource Sharing
+CSRF        : Cross-Site Request Forgery
+JWT         : JSON Web Token
+OAuth       : Open Authorization
+TLS/SSL     : Transport Layer Security / Secure Sockets Layer
+URL         : Uniform Resource Locator
+UUID        : Universally Unique Identifier
+HA          : High Availability
+SLA         : Service Level Agreement
+
+
+Termes specifiques Kockpit:
+  Audit       : Enregistrement d'une action utilisateur
+  Domain      : Domaine metier (ex: rcu, payment)
+  Env         : Environnement (local, dev, prod)
+  Manifest    : Ensemble de configurations groupees
+  Feature Flag: Activation/desactivation dynamique de fonctionnalite
+  Adapter     : Implementation concrete d'une interface
+
+
+================================================================================
+                         CONVENTIONS
+================================================================================
+
+Notation des endpoints:
+  GET /path          : Endpoint GET
+  POST /path         : Endpoint POST
+  {param}            : Parametre path variable
+  ?param=value       : Parametre query string
+
+Notation du code:
+  ClassName          : Classe Java
+  methodName()       : Methode Java
+  CONSTANT           : Constante
+  variable           : Variable
+  package.name       : Package Java
+
+Parametres:
+  (required)         : Parametre obligatoire
+  (optional)         : Parametre optionnel
+  (default: X)       : Valeur par defaut
+
+
+================================================================================
+                         MISES A JOUR
+================================================================================
+
+Ce document est maintenu a jour avec chaque version.
+
+Historique:
+  2025-12-01 : Creation initiale (v1.0.0-SNAPSHOT)
+  2025-12-02 : Ajout documentation application demo
+             - DEMO-APP-GUIDE.txt
+             - DEMO-APP-TROUBLESHOOTING.txt
+             - Creation structure kockpit-demo-app
+             : Ajout guide troubleshooting build
+             - BUILD-TROUBLESHOOTING.txt
+             - CHANGELOG-BUILD-FIXES.txt
+             - START-HERE.txt (guide d'orientation)
+             - Documentation complete des fixes Maven/Lombok/Java 17
+
+
+Pour signaler une erreur ou suggerer une amelioration:
+  - Ouvrir une issue
+  - Contact: (a completer)
+
+
+================================================================================
+                         RESSOURCES EXTERNES
+================================================================================
+
+Spring Boot:
+  - Documentation: https://spring.io/projects/spring-boot
+  - Guides: https://spring.io/guides
+  - Reference: https://docs.spring.io/spring-boot/docs/current/reference/
+
+OpenSearch:
+  - Documentation: https://opensearch.org/docs/latest/
+  - API Reference: https://opensearch.org/docs/latest/api-reference/
+  - Dashboards: https://opensearch.org/docs/latest/dashboards/
+
+Docker:
+  - Documentation: https://docs.docker.com/
+  - Compose: https://docs.docker.com/compose/
+
+Maven:
+  - Documentation: https://maven.apache.org/guides/
+
+Java:
+  - JDK 17 Docs: https://docs.oracle.com/en/java/javase/17/
+
+
+================================================================================
+                         SUPPORT
+================================================================================
+
+Pour obtenir de l'aide:
+  1. Consulter cette documentation
+  2. Consulter la section Troubleshooting des fichiers
+  3. Consulter les logs de l'application
+  4. Ouvrir une issue (repository)
+  5. Contacter l'equipe (a completer)
+
+
+================================================================================
+
+Bonne lecture !
+
+================================================================================

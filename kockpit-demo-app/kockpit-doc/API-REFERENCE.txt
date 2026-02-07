@@ -1,0 +1,796 @@
+================================================================================
+                    KOCKPIT BACKENDS - API REFERENCE
+================================================================================
+
+Version: 1.0.0-SNAPSHOT
+Base URL: http://localhost:8080/backend/api
+
+Authentification: Basic HTTP Auth
+  Username: user
+  Password: password
+
+================================================================================
+                           TABLE DES MATIERES
+================================================================================
+
+1. AUTHENTIFICATION
+2. AUDITS API
+3. CONFIGURATION API
+4. FEATURE FLIPPING API
+5. ACTUATOR ENDPOINTS
+6. CODES D'ERREUR
+7. EXEMPLES COMPLETS
+
+
+================================================================================
+1. AUTHENTIFICATION
+================================================================================
+
+Type: HTTP Basic Authentication
+
+Header requis:
+  Authorization: Basic <base64(username:password)>
+
+Exemple:
+  # Encoder les credentials
+  $ echo -n "user:password" | base64
+  dXNlcjpwYXNzd29yZA==
+
+  # Utiliser dans la requete
+  Authorization: Basic dXNlcjpwYXNzd29yZA==
+
+Avec curl:
+  curl -u user:password http://localhost:8080/backend/api/...
+
+Codes de retour:
+  200 OK           - Authentification reussie
+  401 Unauthorized - Credentials invalides
+  403 Forbidden    - Acces refuse
+
+
+================================================================================
+2. AUDITS API
+================================================================================
+
+Base path: /{domain}/{env}/audits
+
+Parametres path communs:
+  domain : Domaine metier (ex: rcu, payment, billing)
+  env    : Environnement (ex: local, dev, staging, prod)
+
+
+--------------------------------------------------------------------------------
+2.1 Rechercher des audits (GET)
+--------------------------------------------------------------------------------
+
+Endpoint:
+  GET /{domain}/{env}/audits/_search
+
+Parametres query:
+  start : Offset de pagination (defaut: 0)
+  size  : Nombre d'elements (defaut: 50, max: 1000)
+
+Exemple de requete:
+  GET /rcu/local/audits/_search?start=0&size=10
+
+Reponse (200 OK):
+  {
+    "size": 10,
+    "items": [
+      {
+        "id": "audit-123",
+        "timestamp": "2025-12-01T21:00:00Z",
+        "user": "john.doe",
+        "action": "USER_LOGIN",
+        "details": {...}
+      },
+      ...
+    ],
+    "total_count": 156
+  }
+
+Codes de retour:
+  200 OK              - Succes
+  400 Bad Request     - Parametres invalides
+  401 Unauthorized    - Non authentifie
+  500 Internal Error  - Erreur serveur
+
+
+--------------------------------------------------------------------------------
+2.2 Rechercher des audits (POST)
+--------------------------------------------------------------------------------
+
+Endpoint:
+  POST /{domain}/{env}/audits/_search
+
+Content-Type:
+  application/json
+
+Body:
+  {
+    "filters": [
+      {
+        "field": "user",
+        "operator": "equals",
+        "value": "john.doe"
+      },
+      {
+        "field": "timestamp",
+        "operator": "gte",
+        "value": "2025-12-01T00:00:00Z"
+      }
+    ],
+    "sort": {
+      "field": "timestamp",
+      "order": "desc"
+    },
+    "pagination": {
+      "start": 0,
+      "size": 50
+    }
+  }
+
+Operateurs supportes:
+  - equals      : Egalite exacte
+  - contains    : Contient (texte)
+  - gte         : Greater than or equal (>=)
+  - lte         : Less than or equal (<=)
+  - gt          : Greater than (>)
+  - lt          : Less than (<)
+  - in          : Dans une liste
+  - not_in      : Pas dans une liste
+
+Exemple de requete:
+  POST /rcu/local/audits/_search
+  Content-Type: application/json
+
+  {
+    "filters": [
+      {
+        "field": "action",
+        "operator": "in",
+        "value": ["USER_LOGIN", "USER_LOGOUT"]
+      }
+    ],
+    "sort": {
+      "field": "timestamp",
+      "order": "desc"
+    },
+    "pagination": {
+      "start": 0,
+      "size": 20
+    }
+  }
+
+Reponse (200 OK):
+  {
+    "size": 20,
+    "items": [...],
+    "total_count": 45
+  }
+
+
+--------------------------------------------------------------------------------
+2.3 Recuperer un audit par ID
+--------------------------------------------------------------------------------
+
+Endpoint:
+  GET /{domain}/{env}/audits/{id}
+
+Parametres path:
+  id : Identifiant unique de l'audit
+
+Exemple de requete:
+  GET /rcu/local/audits/audit-123
+
+Reponse (200 OK):
+  {
+    "id": "audit-123",
+    "timestamp": "2025-12-01T21:00:00Z",
+    "domain": "rcu",
+    "env": "local",
+    "user": "john.doe",
+    "action": "USER_LOGIN",
+    "ip_address": "192.168.1.100",
+    "user_agent": "Mozilla/5.0...",
+    "details": {
+      "session_id": "sess-xyz",
+      "login_method": "password"
+    }
+  }
+
+Codes de retour:
+  200 OK           - Succes
+  404 Not Found    - Audit non trouve
+  401 Unauthorized - Non authentifie
+
+
+--------------------------------------------------------------------------------
+2.4 Lister les audits
+--------------------------------------------------------------------------------
+
+Endpoint:
+  GET /{domain}/{env}/audits
+
+Parametres query:
+  start : Offset de pagination (defaut: 0)
+  size  : Nombre d'elements (defaut: 50)
+
+Exemple de requete:
+  GET /rcu/local/audits?start=0&size=25
+
+Reponse (200 OK):
+  {
+    "size": 25,
+    "items": [...],
+    "total_count": 1000
+  }
+
+
+================================================================================
+3. CONFIGURATION API
+================================================================================
+
+Base path: /config
+
+
+--------------------------------------------------------------------------------
+3.1 Lister les configurations
+--------------------------------------------------------------------------------
+
+Endpoint:
+  GET /config
+
+Exemple de requete:
+  GET /config
+
+Reponse (200 OK):
+  [
+    {
+      "name": "application-config",
+      "configs": [
+        {
+          "key": "app.timeout",
+          "value": "30s",
+          "service": {
+            "name": "payment-service",
+            "version": "1.2.0"
+          },
+          "created_at": "2025-12-01T10:00:00Z",
+          "updated_at": "2025-12-01T15:30:00Z"
+        },
+        {
+          "key": "app.max_retries",
+          "value": "3",
+          "service": {
+            "name": "payment-service",
+            "version": "1.2.0"
+          },
+          "created_at": "2025-12-01T10:00:00Z"
+        }
+      ]
+    }
+  ]
+
+
+--------------------------------------------------------------------------------
+3.2 Creer une configuration
+--------------------------------------------------------------------------------
+
+Endpoint:
+  POST /config
+
+Content-Type:
+  application/json
+
+Body:
+  {
+    "key": "app.feature.new_ui",
+    "value": "enabled",
+    "service": {
+      "name": "frontend-app",
+      "version": "2.0.0"
+    },
+    "metadata": {
+      "author": "john.doe",
+      "description": "Active la nouvelle interface"
+    }
+  }
+
+Exemple de requete:
+  POST /config
+  Content-Type: application/json
+
+  {
+    "key": "app.timeout",
+    "value": "60s",
+    "service": {
+      "name": "api-gateway",
+      "version": "1.0.0"
+    }
+  }
+
+Reponse (200 OK):
+  {
+    "key": "app.timeout",
+    "value": "60s",
+    "service": {
+      "name": "api-gateway",
+      "version": "1.0.0"
+    },
+    "created_at": "2025-12-01T21:30:00Z"
+  }
+
+Codes de retour:
+  200 OK              - Configuration creee
+  400 Bad Request     - Donnees invalides
+  401 Unauthorized    - Non authentifie
+  409 Conflict        - Configuration existe deja
+
+
+================================================================================
+4. FEATURE FLIPPING API
+================================================================================
+
+Base path: /{domain}/{env}/feature-flipping
+
+
+--------------------------------------------------------------------------------
+4.1 Activer/Desactiver une feature
+--------------------------------------------------------------------------------
+
+Endpoint:
+  PUT /{domain}/{env}/feature-flipping?key={featureKey}
+
+Content-Type:
+  application/json
+
+Parametres query:
+  key : Identifiant de la feature
+
+Body:
+  {
+    "enabled": true,
+    "percentage": 100,
+    "metadata": {
+      "author": "john.doe",
+      "reason": "Deploiement en production"
+    }
+  }
+
+Champs body:
+  enabled    : (boolean) Activer ou desactiver
+  percentage : (int) Pourcentage de deploiement (0-100)
+  metadata   : (object) Metadonnees optionnelles
+
+Exemple de requete:
+  PUT /rcu/prod/feature-flipping?key=new-payment-gateway
+  Content-Type: application/json
+
+  {
+    "enabled": true,
+    "percentage": 10,
+    "metadata": {
+      "author": "ops-team",
+      "reason": "Canary deployment - 10% des utilisateurs"
+    }
+  }
+
+Reponse (200 OK):
+  {
+    "key": "new-payment-gateway",
+    "enabled": true,
+    "percentage": 10,
+    "domain": "rcu",
+    "env": "prod",
+    "updated_at": "2025-12-01T21:45:00Z",
+    "metadata": {
+      "author": "ops-team",
+      "reason": "Canary deployment - 10% des utilisateurs"
+    }
+  }
+
+Cas d'usage:
+  - Canary deployment (deploiement progressif)
+  - A/B testing
+  - Kill switch (desactivation d'urgence)
+  - Feature preview pour certains utilisateurs
+
+
+--------------------------------------------------------------------------------
+4.2 Historique des features
+--------------------------------------------------------------------------------
+
+Endpoint:
+  GET /{domain}/{env}/feature-flipping/history
+
+Exemple de requete:
+  GET /rcu/prod/feature-flipping/history
+
+Reponse (200 OK):
+  [
+    {
+      "key": "new-payment-gateway",
+      "enabled": true,
+      "percentage": 10,
+      "timestamp": "2025-12-01T21:45:00Z",
+      "author": "ops-team",
+      "action": "ENABLED"
+    },
+    {
+      "key": "new-payment-gateway",
+      "enabled": true,
+      "percentage": 50,
+      "timestamp": "2025-12-01T22:00:00Z",
+      "author": "ops-team",
+      "action": "UPDATED"
+    },
+    {
+      "key": "old-checkout",
+      "enabled": false,
+      "percentage": 0,
+      "timestamp": "2025-12-01T22:15:00Z",
+      "author": "ops-team",
+      "action": "DISABLED"
+    }
+  ]
+
+
+================================================================================
+5. ACTUATOR ENDPOINTS
+================================================================================
+
+Base path: /backend/actuator
+
+Spring Boot Actuator fournit des endpoints de monitoring.
+
+
+--------------------------------------------------------------------------------
+5.1 Health Check
+--------------------------------------------------------------------------------
+
+Endpoint:
+  GET /backend/actuator/health
+
+Reponse (200 OK):
+  {
+    "status": "UP",
+    "components": {
+      "diskSpace": {
+        "status": "UP",
+        "details": {
+          "total": 500000000000,
+          "free": 300000000000,
+          "threshold": 10485760
+        }
+      },
+      "ping": {
+        "status": "UP"
+      }
+    }
+  }
+
+Status possibles:
+  - UP      : Service operationnel
+  - DOWN    : Service en panne
+  - OUT_OF_SERVICE : Service hors service
+  - UNKNOWN : Status inconnu
+
+
+--------------------------------------------------------------------------------
+5.2 Info
+--------------------------------------------------------------------------------
+
+Endpoint:
+  GET /backend/actuator/info
+
+Reponse (200 OK):
+  {
+    "app": {
+      "name": "kockpit-backoffice",
+      "version": "1.0.0-SNAPSHOT",
+      "description": "Kockpit Backend Application"
+    }
+  }
+
+
+--------------------------------------------------------------------------------
+5.3 Metrics
+--------------------------------------------------------------------------------
+
+Endpoint:
+  GET /backend/actuator/metrics
+
+Reponse (200 OK):
+  {
+    "names": [
+      "jvm.memory.used",
+      "jvm.memory.max",
+      "system.cpu.usage",
+      "http.server.requests",
+      ...
+    ]
+  }
+
+Detail d'une metrique:
+  GET /backend/actuator/metrics/jvm.memory.used
+
+  {
+    "name": "jvm.memory.used",
+    "measurements": [
+      {
+        "statistic": "VALUE",
+        "value": 268435456
+      }
+    ]
+  }
+
+
+================================================================================
+6. CODES D'ERREUR
+================================================================================
+
+Format des erreurs:
+  {
+    "timestamp": "2025-12-01T21:30:00Z",
+    "status": 404,
+    "error": "Not Found",
+    "message": "Audit with id 'xyz' not found",
+    "path": "/backend/api/rcu/local/audits/xyz"
+  }
+
+
+Codes HTTP:
+  200 OK                 - Succes
+  201 Created            - Ressource creee
+  204 No Content         - Succes sans contenu
+
+  400 Bad Request        - Requete invalide
+  401 Unauthorized       - Non authentifie
+  403 Forbidden          - Acces refuse
+  404 Not Found          - Ressource non trouvee
+  409 Conflict           - Conflit (ex: ressource existe deja)
+
+  500 Internal Error     - Erreur serveur
+  503 Service Unavailable - Service temporairement indisponible
+
+
+Messages d'erreur courants:
+
+  400 Bad Request:
+    - "Invalid parameter: size must be between 1 and 1000"
+    - "Invalid date format: expected ISO-8601"
+    - "Missing required field: key"
+
+  401 Unauthorized:
+    - "Authentication required"
+    - "Invalid credentials"
+
+  404 Not Found:
+    - "Audit not found"
+    - "Configuration not found"
+
+  500 Internal Error:
+    - "Failed to connect to OpenSearch"
+    - "Database error"
+
+
+================================================================================
+7. EXEMPLES COMPLETS
+================================================================================
+
+--------------------------------------------------------------------------------
+7.1 Exemple: Recherche d'audits avec filtres
+--------------------------------------------------------------------------------
+
+Scenario: Trouver tous les LOGIN d'un utilisateur aujourd'hui
+
+# Etape 1: Preparer les credentials
+$ CREDS=$(echo -n "user:password" | base64)
+
+# Etape 2: Executer la recherche
+$ curl -X POST \
+  -H "Authorization: Basic $CREDS" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filters": [
+      {
+        "field": "user",
+        "operator": "equals",
+        "value": "john.doe"
+      },
+      {
+        "field": "action",
+        "operator": "equals",
+        "value": "USER_LOGIN"
+      },
+      {
+        "field": "timestamp",
+        "operator": "gte",
+        "value": "2025-12-01T00:00:00Z"
+      }
+    ],
+    "sort": {
+      "field": "timestamp",
+      "order": "desc"
+    },
+    "pagination": {
+      "start": 0,
+      "size": 50
+    }
+  }' \
+  http://localhost:8080/backend/api/rcu/local/audits/_search
+
+# Reponse
+{
+  "size": 50,
+  "items": [
+    {
+      "id": "audit-456",
+      "timestamp": "2025-12-01T14:30:00Z",
+      "user": "john.doe",
+      "action": "USER_LOGIN",
+      "ip_address": "192.168.1.50"
+    },
+    {
+      "id": "audit-123",
+      "timestamp": "2025-12-01T08:15:00Z",
+      "user": "john.doe",
+      "action": "USER_LOGIN",
+      "ip_address": "192.168.1.50"
+    }
+  ],
+  "total_count": 2
+}
+
+
+--------------------------------------------------------------------------------
+7.2 Exemple: Deploiement progressif d'une feature
+--------------------------------------------------------------------------------
+
+Scenario: Activer une nouvelle feature progressivement
+
+# Etape 1: Activer pour 10% des utilisateurs
+$ curl -X PUT \
+  -u user:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true,
+    "percentage": 10,
+    "metadata": {
+      "author": "ops-team",
+      "reason": "Phase 1: Canary deployment"
+    }
+  }' \
+  "http://localhost:8080/backend/api/rcu/prod/feature-flipping?key=new-ui"
+
+# Attendre et monitorer...
+
+# Etape 2: Augmenter a 50%
+$ curl -X PUT \
+  -u user:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true,
+    "percentage": 50,
+    "metadata": {
+      "author": "ops-team",
+      "reason": "Phase 2: Aucun incident - augmentation a 50%"
+    }
+  }' \
+  "http://localhost:8080/backend/api/rcu/prod/feature-flipping?key=new-ui"
+
+# Etape 3: Deploiement complet
+$ curl -X PUT \
+  -u user:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true,
+    "percentage": 100,
+    "metadata": {
+      "author": "ops-team",
+      "reason": "Phase 3: Deploiement complet"
+    }
+  }' \
+  "http://localhost:8080/backend/api/rcu/prod/feature-flipping?key=new-ui"
+
+# Consulter l'historique
+$ curl -u user:password \
+  http://localhost:8080/backend/api/rcu/prod/feature-flipping/history
+
+
+--------------------------------------------------------------------------------
+7.3 Exemple: Creer une configuration applicative
+--------------------------------------------------------------------------------
+
+Scenario: Configurer le timeout d'une API
+
+$ curl -X POST \
+  -u user:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "api.timeout",
+    "value": "30s",
+    "service": {
+      "name": "payment-api",
+      "version": "2.1.0"
+    },
+    "metadata": {
+      "author": "dev-team",
+      "description": "Timeout pour les appels API de paiement"
+    }
+  }' \
+  http://localhost:8080/backend/api/config
+
+# Reponse
+{
+  "key": "api.timeout",
+  "value": "30s",
+  "service": {
+    "name": "payment-api",
+    "version": "2.1.0"
+  },
+  "created_at": "2025-12-01T22:00:00Z",
+  "metadata": {
+    "author": "dev-team",
+    "description": "Timeout pour les appels API de paiement"
+  }
+}
+
+
+--------------------------------------------------------------------------------
+7.4 Exemple: Script de monitoring
+--------------------------------------------------------------------------------
+
+Script Bash pour monitorer la sante de l'application:
+
+#!/bin/bash
+# monitor.sh
+
+API_BASE="http://localhost:8080/backend"
+
+echo "=== Kockpit Backend Monitoring ==="
+echo ""
+
+# Health check
+echo "1. Health Check:"
+curl -s "$API_BASE/actuator/health" | python3 -m json.tool
+echo ""
+
+# Disk space
+echo "2. Disk Space:"
+curl -s "$API_BASE/actuator/health" | \
+  python3 -c "import sys,json; print(json.load(sys.stdin)['components']['diskSpace'])"
+echo ""
+
+# JVM Memory
+echo "3. JVM Memory:"
+curl -s "$API_BASE/actuator/metrics/jvm.memory.used" | \
+  python3 -c "import sys,json; \
+    data=json.load(sys.stdin); \
+    value=data['measurements'][0]['value']; \
+    print(f'{value/1024/1024:.2f} MB')"
+echo ""
+
+# Recent audits count
+echo "4. Recent Audits:"
+curl -s -u user:password "$API_BASE/api/rcu/local/audits/_search?size=1" | \
+  python3 -c "import sys,json; print(json.load(sys.stdin)['total_count'])"
+echo ""
+
+
+Utilisation:
+$ chmod +x monitor.sh
+$ ./monitor.sh
+
+
+================================================================================
+                           FIN DE LA REFERENCE API
+================================================================================
+
+Pour plus d'informations:
+  - Documentation complete: ARCHITECTURE.txt
+  - Guide de demarrage: QUICK-START.txt
+
+Version: 1.0.0
+Date: 2025-12-01

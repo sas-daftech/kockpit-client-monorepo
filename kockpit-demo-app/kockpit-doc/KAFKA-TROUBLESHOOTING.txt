@@ -1,0 +1,584 @@
+================================================================================
+            KOCKPIT KAFKA INTEGRATION - TROUBLESHOOTING GUIDE
+================================================================================
+
+Version: 1.0.0-SNAPSHOT
+Date: 2025-12-23
+Auteur: Kockpit Development Team
+
+================================================================================
+                              INTRODUCTION
+================================================================================
+
+Ce document documente les problèmes rencontrés lors de l'intégration de Kafka
+avec Kockpit Audit Trail et leurs solutions.
+
+Ces solutions ont été testées et validées sur un environnement de développement
+Linux avec Java 17.
+
+
+================================================================================
+                    PROBLÈMES IDENTIFIÉS ET SOLUTIONS
+================================================================================
+
+--------------------------------------------------------------------------------
+1. ERREUR: ConfigApiService BEAN NOT FOUND
+--------------------------------------------------------------------------------
+
+Symptôme:
+  Error creating bean with name 'auditFilter': Unsatisfied dependency
+  expressed through method 'auditFilter' parameter 3: Error creating bean
+  with name 'configApiService' that could not be found.
+
+Cause:
+  Les profils Maven ne sont pas activés lors du démarrage de l'application.
+  La dépendance kockpit-backend-service-storage-filesystem n'est pas dans
+  le classpath car le profil Maven 'filesystem' n'est pas actif.
+
+Solution:
+  Utiliser BOTH les profils Maven (-P) ET les profils Spring:
+
+  ✓ Commande correcte:
+    mvn spring-boot:run -P filesystem,opensearch \
+      -Dspring-boot.run.profiles=local,opensearch,filesystem
+
+  ✗ Commande incorrecte:
+    mvn spring-boot:run -Dspring-boot.run.profiles=local,opensearch,filesystem
+    (manque -P filesystem,opensearch)
+
+Explication:
+  - Profils Maven (-P): Contrôlent quelles dépendances sont incluses
+  - Profils Spring (-Dspring-boot.run.profiles): Contrôlent quels beans
+    Spring sont activés au runtime
+
+  Les deux sont nécessaires!
+
+
+--------------------------------------------------------------------------------
+2. ERREUR: DUPLICATE BEAN HttpAuditReportNotificationService
+--------------------------------------------------------------------------------
+
+Symptôme:
+  Error creating bean with name 'eventHubAuditReportNotificationService'
+  Unexpected exception during bean creation
+
+  L'application essaie de créer à la fois:
+  - HttpAuditReportNotificationService (custom HTTP implementation)
+  - KafkaAuditReportNotificationService (Kafka implementation)
+
+Cause:
+  L'implémentation HTTP custom existe encore dans le code source alors
+  qu'on veut utiliser Kafka.
+
+Solution:
+  1. Supprimer le fichier custom:
+     $ rm /path/to/demo-app/src/main/java/com/kockpit/demo/audit/\
+HttpAuditReportNotificationService.java
+
+  2. Clean rebuild:
+     $ mvn clean package -DskipTests
+
+  3. Redémarrer:
+     $ mvn spring-boot:run
+
+Note:
+  Le SDK Kafka s'auto-configure automatiquement quand la dépendance
+  kockpit-audit-notification-starter-kafka est présente.
+
+
+--------------------------------------------------------------------------------
+3. ERREUR: CONFIGURATION KAFKA INCORRECTE
+--------------------------------------------------------------------------------
+
+Symptôme:
+  Error creating bean 'eventHubAuditReportNotificationService':
+  Could not resolve placeholder 'kockpit.sdk.service.audit.notification.topic'
+
+Cause:
+  La propriété de configuration Kafka n'est pas correctement nommée dans
+  application.yaml.
+
+Solution:
+  Utiliser le bon nom de propriété dans application.yaml:
+
+  ✓ Configuration correcte:
+    kockpit:
+      sdk:
+        service:
+          audit:
+            notification:
+              topic: audit
+
+  ✗ Configuration incorrecte:
+    kockpit:
+      audit:
+        notification:
+          kafka:
+            topic: audit
+
+  Le KafkaAuditServiceAutoConfiguration attend spécifiquement:
+    ${kockpit.sdk.service.audit.notification.topic}
+
+
+--------------------------------------------------------------------------------
+4. ERREUR: DUPLICATE KEY 'sdk' IN YAML
+--------------------------------------------------------------------------------
+
+Symptôme:
+  IDE/validation YAML affiche:
+  ✘ [Line 12:3] Key 'sdk' is duplicated
+  ✘ [Line 18:3] Key 'sdk' is duplicated
+
+Cause:
+  Deux blocs 'sdk' au même niveau dans le fichier YAML.
+
+Solution:
+  Fusionner les configurations sous un seul bloc 'sdk':
+
+  ✓ Configuration correcte:
+    kockpit:
+      sdk:
+        domain: demo
+        env: local
+        appId: demo-app
+        enabled: true
+        service:
+          audit:
+            notification:
+              topic: audit
+
+  ✗ Configuration incorrecte:
+    kockpit:
+      sdk:
+        domain: demo
+        env: local
+      sdk:
+        service:
+          audit:
+            notification:
+              topic: audit
+
+
+--------------------------------------------------------------------------------
+5. ERREUR: KAFKA BOOTSTRAP SERVERS NOT CONFIGURED
+--------------------------------------------------------------------------------
+
+Symptôme:
+  org.apache.kafka.common.KafkaException: Failed to construct kafka producer
+
+Cause:
+  Spring Kafka n'a pas la configuration bootstrap-servers.
+
+Solution:
+  Ajouter la configuration Spring Kafka dans application.yaml:
+
+    spring:
+      kafka:
+        bootstrap-servers: localhost:9092
+        producer:
+          key-serializer: org.apache.kafka.common.serialization.StringSerializer
+          value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+Note:
+  Cette configuration est nécessaire pour que KafkaTemplate soit créé
+  automatiquement par Spring Boot.
+
+
+--------------------------------------------------------------------------------
+6. ERREUR: TOPIC MISMATCH PRODUCER/CONSUMER
+--------------------------------------------------------------------------------
+
+Symptôme:
+  - La demo app envoie à Kafka
+  - Le stream consumer ne reçoit rien
+  - Pas d'erreur visible
+
+Cause:
+  Le producer et le consumer utilisent des topics différents:
+  - Producer: envoie au topic "kockpit-audits"
+  - Consumer: écoute le topic "audit"
+
+Solution:
+  Harmoniser les noms de topic:
+
+  Dans demo app (application.yaml):
+    kockpit:
+      sdk:
+        service:
+          audit:
+            notification:
+              topic: audit
+
+  Dans stream consumer (application.yml):
+    kockpit:
+      audit:
+        stream:
+          kafka:
+            topics: audit
+
+Vérification:
+  $ docker exec -it kafka-dev kafka-topics --list \
+    --bootstrap-server localhost:9092
+
+  Doit afficher le topic "audit"
+
+
+--------------------------------------------------------------------------------
+7. ERREUR: OPENSEARCH DASHBOARDS NE MONTRE RIEN
+--------------------------------------------------------------------------------
+
+Symptôme:
+  L'index pattern est créé mais aucun audit n'apparaît dans Discover.
+
+Cause 1: Mauvais champ de temps
+  Le champ @timestamp n'est pas rempli correctement ou le time range
+  ne correspond pas.
+
+Solution 1:
+  Utiliser le champ "start" comme champ de temps au lieu de "@timestamp":
+  1. Supprimer l'ancien index pattern
+  2. Créer un nouveau avec:
+     - Index pattern: demo-audit-data-*
+     - Time field: start (et non @timestamp)
+
+Cause 2: Time range incorrect
+  Le time picker est sur "Last 15 minutes" mais les audits sont plus vieux.
+
+Solution 2:
+  Ajuster le time range:
+  1. Cliquer sur le calendrier (en haut à droite)
+  2. Sélectionner "Last 24 hours" ou "Last 7 days"
+  3. Cliquer "Update"
+
+
+--------------------------------------------------------------------------------
+8. ERREUR: KAFKA STREAM CONSUMER NE DÉMARRE PAS
+--------------------------------------------------------------------------------
+
+Symptôme:
+  L'application stream consumer ne démarre pas, erreur de compilation.
+
+Cause:
+  Le module n'a pas été compilé ou les dépendances ne sont pas résolues.
+
+Solution:
+  1. Compiler d'abord tout Kockpit:
+     $ cd /home/gbonaventure/sources/kiss/kockpit
+     $ mvn clean install -DskipTests
+
+  2. Ensuite démarrer le stream consumer:
+     $ cd kockpit-audit/kockpit-audit-stream/\
+kockpit-audit-stream-application-kafka
+     $ mvn spring-boot:run -Dspring-boot.run.profiles=local
+
+
+--------------------------------------------------------------------------------
+9. ERREUR: OPENSEARCH CONNECTION REFUSED
+--------------------------------------------------------------------------------
+
+Symptôme:
+  org.opensearch.client.RestClient: I/O exception (java.net.ConnectException)
+  Connection refused
+
+Cause:
+  OpenSearch n'est pas démarré ou pas accessible.
+
+Solution:
+  1. Vérifier si OpenSearch tourne:
+     $ docker ps | grep opensearch
+
+  2. Si non, le démarrer:
+     $ cd /home/gbonaventure/sources/kiss/os-kafka
+     $ docker compose -f docker-compose-dev.yml up -d
+
+  3. Attendre 15-20 secondes puis tester:
+     $ curl http://localhost:9200
+
+  4. Vérifier les logs si problème:
+     $ docker compose -f docker-compose-dev.yml logs opensearch-node1-dev
+
+
+--------------------------------------------------------------------------------
+10. ERREUR: KAFKA CONSUMER LAG ÉLEVÉ
+--------------------------------------------------------------------------------
+
+Symptôme:
+  Les audits arrivent avec un délai important dans OpenSearch.
+
+Cause:
+  Le consumer est lent ou le batch size est trop petit.
+
+Solution:
+  Ajuster la configuration du consumer dans application.yml:
+
+    spring:
+      kafka:
+        consumer:
+          max-poll-records: 100    # Augmenter de 50 à 100
+          fetch-min-bytes: 1024    # Batch plus gros
+
+    kockpit:
+      audit:
+        stream:
+          opensearch:
+            scheduler_ms: 2000     # Réduire de 5000 à 2000
+
+Vérifier le lag:
+  $ docker exec -it kafka-dev kafka-consumer-groups \
+    --bootstrap-server localhost:9092 \
+    --describe --group kockpit-audit-stream
+
+
+================================================================================
+                    VÉRIFICATIONS DE SANTÉ DU SYSTÈME
+================================================================================
+
+Checklist complète avant de signaler un problème:
+
+□ Kafka est démarré et accessible
+  $ docker ps | grep kafka
+  $ nc -zv localhost 9092
+
+□ OpenSearch est démarré et accessible
+  $ docker ps | grep opensearch
+  $ curl http://localhost:9200
+
+□ Le topic "audit" existe dans Kafka
+  $ docker exec -it kafka-dev kafka-topics --list \
+    --bootstrap-server localhost:9092
+
+□ Le stream consumer est démarré
+  Voir les logs: "Started KafkaStreamApplication"
+
+□ La demo app est démarrée
+  Voir les logs: "Started DemoApplication"
+
+□ Les profils Maven ET Spring sont corrects
+  Maven: -P filesystem,opensearch
+  Spring: -Dspring-boot.run.profiles=local,opensearch,filesystem
+
+□ Les configurations Kafka correspondent
+  Topic dans demo app = Topic dans stream consumer = "audit"
+
+□ L'index OpenSearch existe
+  $ curl http://localhost:9200/_cat/indices?v
+  Doit voir: demo-audit-data-*
+
+
+================================================================================
+                    COMMANDES DE DIAGNOSTIC UTILES
+================================================================================
+
+# Vérifier l'état des containers Docker
+$ docker ps
+
+# Voir les logs Kafka
+$ docker compose -f docker-compose-dev.yml logs kafka | tail -50
+
+# Voir les logs OpenSearch
+$ docker compose -f docker-compose-dev.yml logs opensearch-node1-dev | tail -50
+
+# Lister les topics Kafka
+$ docker exec -it kafka-dev kafka-topics --list \
+  --bootstrap-server localhost:9092
+
+# Décrire un topic
+$ docker exec -it kafka-dev kafka-topics --describe \
+  --topic audit --bootstrap-server localhost:9092
+
+# Voir les consumer groups
+$ docker exec -it kafka-dev kafka-consumer-groups --list \
+  --bootstrap-server localhost:9092
+
+# Voir le lag d'un consumer group
+$ docker exec -it kafka-dev kafka-consumer-groups \
+  --bootstrap-server localhost:9092 \
+  --describe --group kockpit-audit-stream
+
+# Compter les messages dans un topic
+$ docker exec -it kafka-dev kafka-run-class kafka.tools.GetOffsetShell \
+  --broker-list localhost:9092 --topic audit
+
+# Lire les messages d'un topic (pour debug)
+$ docker exec -it kafka-dev kafka-console-consumer \
+  --bootstrap-server localhost:9092 \
+  --topic audit --from-beginning --max-messages 5
+
+# Vérifier les indices OpenSearch
+$ curl http://localhost:9200/_cat/indices?v
+
+# Compter les documents dans un index
+$ curl http://localhost:9200/demo-audit-data-*/_count
+
+# Santé du cluster OpenSearch
+$ curl http://localhost:9200/_cluster/health?pretty
+
+# Stats des nœuds OpenSearch
+$ curl http://localhost:9200/_nodes/stats?pretty
+
+
+================================================================================
+                    PERFORMANCES ET OPTIMISATION
+================================================================================
+
+Si les performances ne sont pas optimales:
+
+1. Augmenter le nombre de partitions Kafka:
+   $ docker exec -it kafka-dev kafka-topics --alter \
+     --topic audit --partitions 3 --bootstrap-server localhost:9092
+
+2. Augmenter le batch size du producer (dans demo app):
+   spring:
+     kafka:
+       producer:
+         batch-size: 32768        # 32KB au lieu de 16KB
+         linger-ms: 50            # Attendre 50ms avant d'envoyer
+
+3. Augmenter le consumer throughput (dans stream consumer):
+   spring:
+     kafka:
+       consumer:
+         max-poll-records: 200    # 200 au lieu de 50
+         fetch-min-bytes: 10240   # 10KB
+
+4. Optimiser l'indexation OpenSearch (dans stream consumer):
+   kockpit:
+     audit:
+       stream:
+         opensearch:
+           scheduler_ms: 1000     # Indexer toutes les 1 seconde
+           bulk_size: 100         # Batch de 100 documents
+
+
+================================================================================
+                    NETTOYAGE ET RESET COMPLET
+================================================================================
+
+Si tout est cassé et qu'il faut recommencer à zéro:
+
+1. Arrêter toutes les applications:
+   - Ctrl+C sur demo app
+   - Ctrl+C sur stream consumer
+   - Ctrl+C sur backend (si démarré)
+
+2. Arrêter et nettoyer Docker:
+   $ cd /home/gbonaventure/sources/kiss/os-kafka
+   $ docker compose -f docker-compose-dev.yml down -v
+
+   ⚠️ Le flag -v supprime les volumes Docker (PERTE DE DONNÉES)
+
+3. Nettoyer les builds:
+   $ cd /home/gbonaventure/sources/kiss/kockpit
+   $ mvn clean
+
+   $ cd /home/gbonaventure/sources/kiss/kockpit-demo-app
+   $ mvn clean
+
+4. Redémarrer depuis le début:
+   Suivre KAFKA-QUICK-START.txt étape par étape
+
+
+================================================================================
+                    LOGS ET DÉBOGAGE
+================================================================================
+
+Activer le mode DEBUG pour plus de détails:
+
+Dans application.yaml (demo app):
+  logging:
+    level:
+      org.kockpit: DEBUG
+      org.springframework.kafka: DEBUG
+      org.apache.kafka: INFO
+
+Dans application.yml (stream consumer):
+  logging:
+    level:
+      org.kockpit: DEBUG
+      org.springframework.kafka: DEBUG
+      org.opensearch: DEBUG
+
+Puis redémarrer les applications et observer les logs détaillés.
+
+
+================================================================================
+                    ERREURS CONNUES NON BLOQUANTES
+================================================================================
+
+Warning: Commons Logging discovery in action with spring-jcl
+  Cause: Dépendance commons-logging en double
+  Impact: Aucun, juste un warning
+  Solution: Ignorer ou exclure commons-logging du classpath
+
+Warning: Bean not eligible for getting processed by all BeanPostProcessors
+  Cause: Ordre de création des beans Spring
+  Impact: Aucun, juste un warning
+  Solution: Ignorer
+
+Warning: Standard Commons Logging discovery in action
+  Cause: Configuration de logging
+  Impact: Aucun
+  Solution: Ignorer
+
+
+================================================================================
+                    SUPPORT ET RESSOURCES
+================================================================================
+
+Documentation:
+  - KAFKA-QUICK-START.txt: Guide de démarrage rapide
+  - ARCHITECTURE.txt: Architecture générale Kockpit
+  - BUILD-TROUBLESHOOTING.txt: Problèmes de compilation
+
+Logs utiles:
+  - Demo app: Terminal où mvn spring-boot:run est lancé
+  - Stream consumer: Terminal dédié
+  - Kafka: docker compose logs kafka
+  - OpenSearch: docker compose logs opensearch-node1-dev
+
+Commandes de vérification:
+  - Health check demo app: curl http://localhost:8091/actuator/health
+  - Health check stream: curl http://localhost:9080/actuator/health
+  - Health check OpenSearch: curl http://localhost:9200/_cluster/health
+
+
+================================================================================
+                    HISTORIQUE DES PROBLÈMES RÉSOLUS
+================================================================================
+
+[2025-12-23] Profils Maven vs Spring
+  Problème: ConfigApiService bean not found
+  Solution: Utiliser -P filesystem,opensearch en plus des profils Spring
+
+[2025-12-23] Duplicate bean AuditReportNotificationService
+  Problème: HTTP et Kafka implementations en conflit
+  Solution: Supprimer HttpAuditReportNotificationService.java custom
+
+[2025-12-23] Configuration Kafka incorrecte
+  Problème: Placeholder 'kockpit.sdk.service.audit.notification.topic' non résolu
+  Solution: Utiliser le bon chemin de propriété dans application.yaml
+
+[2025-12-23] Time field dans OpenSearch Dashboards
+  Problème: Audits invisibles dans Discover
+  Solution: Utiliser "start" au lieu de "@timestamp" comme champ de temps
+
+
+================================================================================
+                    CONCLUSION
+================================================================================
+
+La plupart des problèmes rencontrés sont liés à:
+  1. La configuration des profils Maven/Spring
+  2. Les noms de propriétés dans les fichiers YAML
+  3. La configuration des champs de temps dans OpenSearch Dashboards
+
+En suivant ce guide et KAFKA-QUICK-START.txt, vous devriez pouvoir résoudre
+99% des problèmes rencontrés.
+
+Pour tout autre problème, vérifier d'abord:
+  - Les logs des applications
+  - L'état des services Docker
+  - La configuration YAML
+
+
+BON DÉBOGAGE !
