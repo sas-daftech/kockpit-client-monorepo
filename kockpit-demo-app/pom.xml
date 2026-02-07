@@ -72,7 +72,7 @@
         <!-- Kockpit Audit Kafka Notification -->
         <dependency>
             <groupId>org.kockpit</groupId>
-            <artifactId>kockpit-audit-notification-starter-kafka</artifactId>
+            <artifactId>kockpit-features-audit-starters-kafka</artifactId>
             <version>${kockpit.version}</version>
         </dependency>
 

@@ -673,6 +673,20 @@ server:
 curl -u user:password http://localhost:8080/backend/api/me
 ```
 
+#### 6. Kafka Integration ClassCastException
+
+**Error**: `ClassCastException: AuditReportWrapper cannot be cast to AuditReport$AuditJsonReport`
+
+**Status**: **Known Issue** - This is a platform-level bug in the Kockpit audit-notification-kafka module.
+
+**Symptom**: Demo app captures audits but fails to send them to Kafka. Scheduled task throws ClassCastException every 10 seconds.
+
+**Impact**: Complete Kafka streaming pipeline is blocked. Audits are captured but not transmitted.
+
+**Workaround**: Use HTTP backend mode instead of Kafka mode (see `KAFKA_INTEGRATION_ISSUE.md` for details).
+
+**Details**: See comprehensive analysis in [`KAFKA_INTEGRATION_ISSUE.md`](./KAFKA_INTEGRATION_ISSUE.md)
+
 ### Detailed Troubleshooting
 
 See comprehensive guides in:
