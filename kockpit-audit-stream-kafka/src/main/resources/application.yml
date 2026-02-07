@@ -1,0 +1,50 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: kockpit-audit-stream
+  kafka:
+    bootstrap-servers:
+      - ${BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${spring.application.name}
+      max-poll-records: 50
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  server:
+    port: 8091
+
+kockpit:
+  domain: kockpit
+  env: local
+  appId: ${spring.application.name}
+
+  audit:
+    stream:
+      opensearch:
+        endpoints: ${OPENSEARCH_ENDPOINTS:http://localhost:9200}
+        index_suffix: ${INDEX_SUFFIX:audit-data}
+        ttl_default_in_days: 5
+      kafka:
+        topics: audits
+      kinesis:
+        stream_name: ${KINESIS_STREAM_NAME}
+        application_name: ${KINESIS_APP_NAME}
+        timeout:
+          connection: 5000
+          socket: 30000
+
+    # application services
+    ttl_default_in_days: 1
+    notification:
+      kafka:
+        topic: ${NOTIFICATION_TOPIC:audits}
+      kinesis:
+        stream_name: ${KINESIS_STREAM_NAME}
+
+aws.region: eu-west-1

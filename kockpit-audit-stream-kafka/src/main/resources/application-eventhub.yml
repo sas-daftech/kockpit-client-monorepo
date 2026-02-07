@@ -1,0 +1,12 @@
+spring:
+  kafka:
+    producer:
+      properties:
+        security.protocol: SASL_SSL
+        sasl.mechanism: PLAIN
+        sasl.jaas.config: ${SASL_JAAS_CONFIG}
+    consumer:
+      properties:
+        security.protocol: SASL_SSL
+        sasl.mechanism: PLAIN
+        sasl.jaas.config: ${SASL_JAAS_CONFIG}

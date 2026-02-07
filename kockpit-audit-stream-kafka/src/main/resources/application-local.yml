@@ -1,0 +1,54 @@
+server:
+  port: 9080
+
+spring:
+  application:
+    name: kockpit-audit-stream-kafka
+  kafka:
+    bootstrap-servers:
+      - localhost:9092
+    consumer:
+      group-id: kockpit-audit-stream
+      max-poll-records: 50
+      auto-offset-reset: latest
+      enable-auto-commit: false
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  server:
+    port: 9081
+
+kockpit:
+  domain: demo
+  env: local
+  appId: ${spring.application.name}
+
+  audit:
+    stream:
+      opensearch:
+        scheduler_ms: 5000        # Index every 5 seconds
+        endpoints: http://localhost:9200
+        index_suffix: audit-data
+        ttl_default_in_days: 5
+      kafka:
+        topics: audit             # Topic name matching demo-app config
+
+    # application services
+    ttl_default_in_days: 5
+    notification:
+      kafka:
+        topic: audit              # Topic name matching demo-app config
+
+logging:
+  level:
+    root: INFO
+    org.kockpit: DEBUG
+    org.kockpit.audit.stream: DEBUG

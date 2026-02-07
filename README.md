@@ -116,7 +116,18 @@ kockpit-client-monorepo/
 │   ├── docker-compose-dev.yml         # OpenSearch + Kafka + Dashboards
 │   └── README.md                      # Infrastructure documentation
 │
-├── kockpit-backend-application/       # Backend API service
+├── kockpit-audit-stream-kafka/        # Kafka Stream Consumer (NEW!)
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/org/kockpit/audit/stream/
+│   │   │   └── resources/
+│   │   │       ├── application.yml            # Base configuration
+│   │   │       └── application-local.yml      # Local dev config
+│   │   └── test/
+│   ├── pom.xml                        # Maven dependencies
+│   └── README.md                      # Stream consumer documentation
+│
+├── kockpit-backend-application/       # Backend API service (Optional)
 │   ├── src/
 │   │   ├── main/
 │   │   │   ├── java/org/kockpit/backend/
@@ -136,7 +147,7 @@ kockpit-client-monorepo/
 │   │   │   ├── repository/            # Data access (in-memory)
 │   │   │   └── model/                 # Domain models
 │   │   └── resources/
-│   │       ├── application.yaml       # Application config
+│   │       ├── application.yaml       # Application config (Kafka mode)
 │   │       └── application-local.yaml # Local development config
 │   ├── kockpit-doc/                   # Comprehensive documentation
 │   │   ├── START-HERE.txt
@@ -150,6 +161,7 @@ kockpit-client-monorepo/
 ├── .gitignore                         # Git ignore rules
 ├── README.md                          # This file
 ├── ARCHITECTURE.md                    # Detailed architecture guide
+├── SECURITY.md                        # Security best practices
 └── LICENSE                            # License information
 ```
 
@@ -212,13 +224,13 @@ docker ps                         # Check all containers
 **Important:** This application consumes audit events from Kafka and indexes them to OpenSearch.
 
 ```bash
-# Navigate to the kockpit-audit-stream application (outside this monorepo)
-cd /path/to/kockpit/kockpit-audit/kockpit-audit-stream/kockpit-audit-stream-application-kafka
+# Navigate to the kockpit-audit-stream-kafka module (in this monorepo)
+cd kockpit-audit-stream-kafka
 
 # Start the consumer
 mvn spring-boot:run -Dspring-boot.run.profiles=local
 
-# Wait for: "Started KafkaStreamApplication in X.XXX seconds"
+# Wait for: "Started KockpitStreamApplication in X.XXX seconds"
 ```
 
 **Kafka Stream Consumer will be available at:** `http://localhost:9080`
